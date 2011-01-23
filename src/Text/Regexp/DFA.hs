@@ -7,7 +7,7 @@
 -- 2 polymorphism?
 
 module Text.Regexp.DFA
-    ( RegexpLike (..)
+    ( FiniteStateAcceptor (..)
     , DFA (..)
     , makeDFA
     , runDFA
@@ -26,8 +26,7 @@ import           Data.CharacterSet
 import "mtl"     Control.Monad.State
 
 {------------------------------------------------------------------------------}
--- FIXME: this needs a better name
-class Ord r => RegexpLike r where
+class Ord r => FiniteStateAcceptor r where
     type Result r :: *
     diff           :: Char -> r -> r
     matchesNothing :: r -> Bool
@@ -58,7 +57,7 @@ addTransition src cl tgt =
 
 -- FIXME: could compress all error states into one?
 -- I think this is already done by the normalisation stuff in Text.Regexp
-newState :: RegexpLike re => re -> ConstructorM re Int
+newState :: FiniteStateAcceptor re => re -> ConstructorM re Int
 newState r =
     do CS states next trans error final <- get
        let states' = M.insert r next states
@@ -78,10 +77,10 @@ newState r =
 -- we get are non-overlapping and cover the whole of the character
 -- set.
 
-explore :: RegexpLike re => re -> Int -> ConstructorM re ()
+explore :: FiniteStateAcceptor re => re -> Int -> ConstructorM re ()
 explore q s = mapM_ (goto q s) (S.elems $ classes q)
 
-goto :: RegexpLike re => re -> Int -> CSet -> ConstructorM re ()
+goto :: FiniteStateAcceptor re => re -> Int -> CSet -> ConstructorM re ()
 goto q s cl =
     case getRepresentative cl of
       Nothing ->
@@ -104,7 +103,7 @@ data DFA a = DFA { numStates   :: Int
                  }
              deriving Show
 
-makeDFA :: RegexpLike re => re -> DFA (Result re)
+makeDFA :: FiniteStateAcceptor re => re -> DFA (Result re)
 makeDFA r = DFA next transArray error final
     where
       init = CS (M.fromList [ (r, 0) ]) 1 (IM.fromList []) IS.empty IM.empty

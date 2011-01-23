@@ -46,7 +46,7 @@ classesN (NNot n)  = classesN n
 boolToMaybe True  = Just ()
 boolToMaybe False = Nothing
 
-instance DFA.RegexpLike Regexp where
+instance DFA.FiniteStateAcceptor Regexp where
     type DFA.Result Regexp = ()
     diff c         = diffN c {- norm . diffRE c . forget -}
     matchesNothing = matchesNothingN {- matchesNothingRE . forget -}
@@ -56,7 +56,7 @@ instance DFA.RegexpLike Regexp where
 -- FIXME: this is only here because the 'andClasses' function is
 -- here. It should really be in Text.Regexp.DFA. And the 'andClasses'
 -- function should be in Text.CharacterSet
-instance (DFA.RegexpLike r, DFA.Result r ~ (), Ord a) => DFA.RegexpLike [(r,a)] where
+instance (DFA.FiniteStateAcceptor r, DFA.Result r ~ (), Ord a) => DFA.FiniteStateAcceptor [(r,a)] where
     type DFA.Result [(r,a)] = a
     diff c         = map (first $ DFA.diff c)
     matchesNothing = all (DFA.matchesNothing . fst)
