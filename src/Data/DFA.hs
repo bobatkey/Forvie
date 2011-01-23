@@ -16,13 +16,13 @@ module Data.DFA
     )
     where
 
+import           Prelude hiding (lookup)
 import qualified Data.Set as S
 import qualified Data.Map as M
 import qualified Data.IntMap as IM
 import qualified Data.IntSet as IS
 import           Data.Array (Array, array, (!))
 import           Data.RangeSet
-import           Data.CharSet
 import "mtl"     Control.Monad.State
 
 {------------------------------------------------------------------------------}
@@ -31,14 +31,14 @@ class Ord r => FiniteStateAcceptor r where
     diff           :: Char -> r -> r
     matchesNothing :: r -> Bool
     matchesEmpty   :: r -> Maybe (Result r)
-    classes        :: r -> S.Set CSet
+    classes        :: r -> Partition Char
 
 {------------------------------------------------------------------------------}
 -- DFA construction
 data ConstructorState re
     = CS { csStates      :: M.Map re Int
          , csNextState   :: Int
-         , csTransitions :: IM.IntMap [(CSet,Int)]
+         , csTransitions :: IM.IntMap (TotalMap Char Int)
          , csErrorStates :: IS.IntSet
          , csFinalStates :: IM.IntMap (Result re)
          }
@@ -48,60 +48,42 @@ type ConstructorM re a = State (ConstructorState re) a
 haveVisited :: Ord re => re -> ConstructorM re (Maybe Int)
 haveVisited r = get >>= return . M.lookup r . csStates
 
-addTransition :: Int -> CSet -> Int -> ConstructorM re ()
-addTransition src cl tgt =
-    modify $ \s -> s{ csTransitions = IM.alter addT src (csTransitions s) }
-    where
-      addT Nothing  = Just [(cl,tgt)]
-      addT (Just l) = Just ((cl,tgt):l)
+setTransitions :: Int -> TotalMap Char Int -> ConstructorM re ()
+setTransitions src map =
+    modify $ \s -> s { csTransitions = IM.insert src map (csTransitions s) }
 
 -- FIXME: could compress all error states into one?
--- I think this is already done by the normalisation stuff in Text.Regexp
 newState :: FiniteStateAcceptor re => re -> ConstructorM re Int
-newState r =
-    do CS states next trans error final <- get
-       let states' = M.insert r next states
-           next'   = next + 1
-           error'  = if matchesNothing r then IS.insert next error else error
-           final'  = case matchesEmpty r of
-                       Nothing  -> final
-                       Just res -> IM.insert next res final
-       put (CS states' next' trans error' final')
-       return next
+newState r = do
+  CS states next trans error final <- get
+  let states' = M.insert r next states
+      next'   = next + 1
+      error'  = if matchesNothing r then IS.insert next error else error
+      final'  = case matchesEmpty r of
+                  Nothing  -> final
+                  Just res -> IM.insert next res final
+  put (CS states' next' trans error' final')
+  return next
 
--- rework this so that we visit a node, we gather all the outgoing
--- transitions at once and combine them into a single transition table
--- entry
+explore :: FiniteStateAcceptor re => re -> ConstructorM re Int
+explore q = do
+  s <- newState q
+  t <- makeTotalMapM (classes q)
+       $ \c -> do let q' = diff c q
+                  visited <- haveVisited q'
+                  case visited of
+                    Nothing -> explore q'
+                    Just s  -> return s
+  setTransitions s t
+  return s
 
--- Also, want to record the fact that the collection of classes that
--- we get are non-overlapping and cover the whole of the character
--- set.
-
-explore :: FiniteStateAcceptor re => re -> Int -> ConstructorM re ()
-explore q s = mapM_ (goto q s) (S.elems $ classes q)
-
-goto :: FiniteStateAcceptor re => re -> Int -> CSet -> ConstructorM re ()
-goto q s cl =
-    case getRepresentative cl of
-      Nothing ->
-          return ()
-      Just c ->
-          do let qcn = diff c q
-             visited <- haveVisited qcn
-             case visited of
-               Just s' ->
-                   do addTransition s cl s'
-               Nothing ->
-                   do s' <- newState qcn
-                      addTransition s cl s'
-                      explore qcn s'
-
-data DFA a = DFA { numStates   :: Int
-                 , transitions :: Array Int [(CSet,Int)]
-                 , errorStates :: IS.IntSet
-                 , finalStates :: IM.IntMap a
-                 }
-             deriving Show
+data DFA a =
+    DFA { numStates   :: Int
+        , transitions :: Array Int (TotalMap Char Int)
+        , errorStates :: IS.IntSet
+        , finalStates :: IM.IntMap a
+        }
+    deriving Show
 
 instance Functor DFA where
     fmap f dfa =
@@ -110,9 +92,9 @@ instance Functor DFA where
 makeDFA :: FiniteStateAcceptor re => re -> DFA (Result re)
 makeDFA r = DFA next transArray error final
     where
-      init = CS (M.fromList [ (r, 0) ]) 1 (IM.fromList []) IS.empty IM.empty
+      init = CS (M.fromList [ {-(r, 0)-} ]) 0 IM.empty IS.empty IM.empty
 
-      CS states next trans error final = execState (explore r 0) init
+      CS states next trans error final = execState (explore r) init
 
       transArray = array (0,next-1) (IM.assocs trans)
 
@@ -125,13 +107,12 @@ data TransitionResult a
       deriving (Eq, Ord, Show)
 
 transition :: DFA a -> Int -> Char -> TransitionResult a
-transition (DFA _ transitions errorStates acceptingStates) state c = result
+transition dfa state c = result
     where
-      newState = jump (transitions ! state)
-
-      jump []         = error "Non exhaustive jumps"
-      jump ((cl,s):l) = if c `memberOf` cl then s else jump l
-
+      DFA _ transitions errorStates acceptingStates = dfa
+      
+      newState = lookup (transitions ! state) c
+      
       result = if IS.member newState errorStates then Error
                else case IM.lookup newState acceptingStates of
                       Nothing -> Change newState
@@ -143,7 +124,4 @@ runDFA dfa = aux 0
       DFA _ transitions _ final = dfa
 
       aux s []     = IM.lookup s final
-      aux s (c:cs) = aux (jump c (transitions ! s)) cs
-
-      jump c []         = error "Non exhaustive jumps"
-      jump c ((cl,s):l) = if c `memberOf` cl then s else jump c l
+      aux s (c:cs) = aux (lookup (transitions ! s) c) cs

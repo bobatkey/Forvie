@@ -34,7 +34,6 @@ module Data.RangeSet
     , null
     , ranges
     
-    
     -- * Partitions
     , Partition
     , fromSet
@@ -43,34 +42,24 @@ module Data.RangeSet
     -- * Maps
     , TotalMap
     , makeTotalMap
+    , makeTotalMapM
     , lookup
+    , assocs
     )
     where
 
 import           Prelude hiding (null, lookup)
 import qualified Data.Set as S
+import           Control.Monad (forM)
 import           Data.List (intercalate)
 import           Data.Maybe (fromJust)
 import           Data.String (IsString)
 import           Data.BooleanAlgebra
 import           Data.Functor
 import           Test.QuickCheck hiding (ranges)
-import           Data.Array
+import           Data.Array hiding (assocs)
 
-{- Representation of character sets, copied from cset.ml from Alain
-   Frisch's ulex for ocaml. Only difference is that because we are
-   using 'Char's to represent characters, the implementation has to be
-   more careful about going off the end of the range of expressible
-   characters. -}
-
-{- Character sets are represented as increasing, non-overlapping,
-   non-empty lists of intervals -}
-
--- TODO: coalescing of ranges that abutt. Seems to do this already?
-
--- | A set of unicode codepoints. Note that this type is an instance
--- of 'IsString', so character sets can be specified as literal
--- strings.
+-- | A subset of the given type. Stored as a list of ranges.
 newtype Set a = Set { unSet :: [(a,a)] }
     deriving (Eq,Ord)
 
@@ -191,22 +180,36 @@ fromSet s
 andClasses :: (Enum a, Bounded a, Ord a) =>
               Partition a -> Partition a -> Partition a
 andClasses (Partition x) (Partition y) =
-    Partition $ S.fromList [ a `intersect` b | a <- S.elems x, b <- S.elems y ]
+    Partition $ S.fromList [ i |
+                             a <- S.elems x
+                           , b <- S.elems y
+                           , let i = a `intersect` b 
+                           , not (null i)]
 
 --------------------------------------------------------------------------------
 -- FIXME: need a better representation than this
 -- Should be a balanced tree
 newtype TotalMap a b = TotalMap [(Set a,b)]
+    deriving Show
 
 makeTotalMap :: Partition a -> (a -> b) -> TotalMap a b
 makeTotalMap (Partition sets) f =
     TotalMap [ (set, f (fromJust $ getRepresentative set)) | set <- S.elems sets ]
-                       
+
+makeTotalMapM :: Monad m => Partition a -> (a -> m b) -> m (TotalMap a b)
+makeTotalMapM (Partition sets) f =
+    do mappings <- forM (S.elems sets) $ \set -> do b <- f (fromJust $ getRepresentative set)
+                                                    return (set, b)
+       return (TotalMap mappings)
+
 lookup :: Ord a => TotalMap a b -> a -> b
 lookup (TotalMap mappings) a = go mappings
     where 
       go []        = error "internal error: not a total map"
       go ((s,b):m) = if a `memberOf` s then b else go m
+
+assocs :: TotalMap a b -> [(Set a, b)]
+assocs (TotalMap mappings) = mappings
 
 
       {-

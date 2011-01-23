@@ -8,8 +8,8 @@ import qualified Data.IntMap as IM
 import qualified Data.IntSet as IS
 import           Data.Array (Array, array, assocs)
 import           Data.DFA
-import           Data.RangeSet
-import           Data.CharSet
+import           Data.RangeSet hiding (assocs)
+import qualified Data.RangeSet as RS
 import           Language.Haskell.TH
 import           Language.Haskell.TH.Syntax
 
@@ -25,7 +25,7 @@ makeTransitionFunction (DFA numStates transitions errorStates acceptingStates)
            (caseE (varE state) (map mkMatch $ assocs transitions))
       where
         mkMatch (q, trans) = match (litP (IntegerL $ fromIntegral q))
-                                   (guardedB $ map mkCharMatch $ flattenCSets trans)
+                                   (guardedB $ map mkCharMatch $ flattenCSets $ RS.assocs trans)
                                    []
 
         c = mkName "c"

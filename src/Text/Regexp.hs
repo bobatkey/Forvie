@@ -13,7 +13,7 @@ module Text.Regexp
 
 import qualified Data.Set as S
 import           Data.String
-import           Data.RangeSet hiding (andClasses)
+import           Data.RangeSet
 import           Data.CharSet
 import qualified Data.DFA as DFA
 import           Data.BooleanAlgebra
@@ -24,20 +24,22 @@ import           Data.Maybe (isJust)
 {------------------------------------------------------------------------------}
 -- move this to Text.CharacterSet when the stuff with exhaustive
 -- partitions is done
+{-
 andClasses :: S.Set CSet -> S.Set CSet -> S.Set CSet
 andClasses x y = S.fromList [ a .&. b | a <- S.elems x, b <- S.elems y ]
+-}
 
-classesN :: Regexp -> S.Set CSet
+classesN :: Regexp -> Partition Char
 classesN (NSeq ns) = classesNs ns
     where
-      classesNs []        = S.singleton one
+      classesNs []          = fromSet one
       classesNs (n:ns) 
           | matchesEmptyN n = classesN n `andClasses` classesNs ns
           | otherwise       = classesN n
-classesN (NAlt ns) = foldr andClasses (S.fromList [zero, one]) $ map classesN $ S.elems ns
-classesN (NTok c)  = S.fromList [c, complement c]
+classesN (NAlt ns) = foldr andClasses (fromSet one) $ map classesN $ S.elems ns
+classesN (NTok c)  = fromSet c
 classesN (NStar n) = classesN n
-classesN (NAnd ns) = foldr andClasses (S.fromList [zero, one]) $ map classesN $ S.elems ns
+classesN (NAnd ns) = foldr andClasses (fromSet one) $ map classesN $ S.elems ns
 classesN (NNot n)  = classesN n
 
 {------------------------------------------------------------------------------}
@@ -61,7 +63,7 @@ instance (DFA.FiniteStateAcceptor r, DFA.Result r ~ (), Ord a) => DFA.FiniteStat
     diff c         = map (first $ DFA.diff c)
     matchesNothing = all (DFA.matchesNothing . fst)
     matchesEmpty   = fmap snd . find (isJust . DFA.matchesEmpty . fst)
-    classes        = foldl andClasses (S.fromList [zero,one]) . map (DFA.classes . fst)
+    classes        = foldl andClasses (fromSet one) . map (DFA.classes . fst)
 
 {------------------------------------------------------------------------------}
 matchesNothingN :: Regexp -> Bool

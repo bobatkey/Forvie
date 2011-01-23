@@ -6,6 +6,7 @@ import           Data.Array (assocs)
 import qualified Data.IntSet as IS
 import qualified Data.IntMap as IM
 import           Data.RangeSet (ranges)
+import qualified Data.RangeSet as RS
 import           Data.Char (ord)
 import           Data.SExpr
 import           Data.DFA
@@ -25,7 +26,7 @@ makeTransitionFunction dfa =
       clauses = map doState $ assocs transitions
       
       doState (q, trans) = ( [ Atom "=", Atom "state", IntConst q ]
-                           , cond $ map doTrans $ flattenCSets trans
+                           , cond $ map doTrans $ flattenCSets $ RS.assocs trans
                            )
                            
       doTrans (low, high, res) =
