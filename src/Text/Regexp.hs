@@ -13,7 +13,7 @@ module Text.Regexp
 
 import qualified Data.Set as S
 import           Data.String
-import           Data.RangeSet
+import           Data.RangeSet hiding (andClasses)
 import           Data.CharSet
 import qualified Data.DFA as DFA
 import           Data.BooleanAlgebra

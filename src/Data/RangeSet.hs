@@ -5,23 +5,23 @@
 -- Copyright   :  Robert Atkey 2010
 -- License     :  BSD3
 --
--- Maintainer  :  bob.atkey@gmail.com
+-- Maintainer  :  Robert.Atkey@cis.strath.ac.uk
 -- Stability   :  experimental
 -- Portability :  unknown
 --
--- Representation of sets of elements of 'Bounded' instances. Such
--- types have a total ordering with minimum and maximum elements. Sets
--- are represented as ranges of elements.
-
--- Representation of unicode character sets, based on cset.ml from
--- Alain Frisch's ulex for ocaml. One difference is that because we
--- are using 'Char's to represent characters, the implementation has
--- to be more careful about going off the end of the range of
--- expressible characters.
+-- Representation of sets of elements of ('Bounded', 'Ord', 'Enum')
+-- instances. Such types have a total ordering with minimum and
+-- maximum elements. Sets are represented as ranges of elements.
+--
+-- The implementation is based on the implementation of sets of
+-- Unicode code points in cset.ml from Alain Frisch's ulex for
+-- OCaml. One difference is that because this implementation uses
+-- instances of 'Bounded'to represent characters, it has to be more
+-- careful about going off the end of the range.
 
 module Data.RangeSet
     (
-      -- * Range Set type
+    -- * Range Set type
       Set ()
       
     -- * Construction 
@@ -32,15 +32,30 @@ module Data.RangeSet
     , memberOf
     , getRepresentative
     , null
-    , ranges)
+    , ranges
+    
+    
+    -- * Partitions
+    , Partition
+    , fromSet
+    , andClasses
+      
+    -- * Maps
+    , TotalMap
+    , makeTotalMap
+    , lookup
+    )
     where
 
-import Prelude hiding (null)
-import Data.List (intercalate)
-import Data.String
-import Data.BooleanAlgebra
-import Data.Functor
-import Test.QuickCheck hiding (ranges)
+import           Prelude hiding (null, lookup)
+import qualified Data.Set as S
+import           Data.List (intercalate)
+import           Data.Maybe (fromJust)
+import           Data.String (IsString)
+import           Data.BooleanAlgebra
+import           Data.Functor
+import           Test.QuickCheck hiding (ranges)
+import           Data.Array
 
 {- Representation of character sets, copied from cset.ml from Alain
    Frisch's ulex for ocaml. Only difference is that because we are
@@ -80,9 +95,9 @@ instance (Enum a, Ord a, Bounded a) => BooleanAlgebra (Set a) where
     one        = everything
     zero       = empty
 
--- | Returns the list of ranges of unicode codepoints represented by
--- the given 'CSet'. The end points of each range are inclusive, and
--- the ranges are in increasing order.
+-- | Returns the list of ranges of elements represented by the given
+-- 'Set'. The end points of each range are inclusive, and the ranges
+-- are in increasing order.
 ranges :: Set a -> [(a,a)]
 ranges (Set l) = l
 
@@ -104,7 +119,7 @@ memberOf c (Set l) = aux c l
       aux c []        = False
       aux c ((i,j):l) = (i <= c && c <= j) || aux c l
 
--- | Returns an arbitrary character in the given set. Returns
+-- | Returns an arbitrary element in the given set. Returns
 -- 'Nothing' if the set is empty.
 getRepresentative :: Set a -> Maybe a
 getRepresentative (Set [])        = Nothing
@@ -114,7 +129,7 @@ getRepresentative (Set ((i,_):_)) = Just i
 singleton :: a -> Set a
 singleton c = Set [(c,c)]
 
--- | Test to determine whether the given character set is empty.
+-- | Test to determine whether the given set is empty.
 null :: Set a -> Bool
 null (Set []) = True
 null (Set _)  = False
@@ -144,7 +159,7 @@ union (Set c1) (Set c2) = Set $ aux c1 c2
           else aux c2 c1
 
 -- | Computes the complement of the given set, i.e. the set of all
--- characters not in the argument.
+-- elements not in the given set.
 complement :: (Enum a, Bounded a, Ord a) => Set a -> Set a
 complement = Set . aux minBound . unSet
     where
@@ -161,63 +176,62 @@ intersect :: (Enum a, Bounded a, Ord a) => Set a -> Set a -> Set a
 intersect c1 c2 = Data.RangeSet.complement (Data.RangeSet.complement c1 `union` Data.RangeSet.complement c2)
 
 {------------------------------------------------------------------------------}
+-- FIXME: Need to do something with this
 prop_interval a b c = a <= c && c <= b ==> c `memberOf` (interval a b)
 
-{-
-{------------------------------------------------------------------------------}
--- Some character sets
--- FIXME: split this out?
-xmlNameStartChar = singleton ':'
-                   `union`
-                   interval 'A' 'Z'
-                   `union`
-                   singleton '_'
-                   `union`
-                   interval 'a' 'z'
-                   `union`
-                   interval '\xc0' '\xd6'
-                   `union`
-                   interval '\xd8' '\xf6'
-                   `union`
-                   interval '\x370' '\x37d'
-                   `union`
-                   interval '\x37f' '\x1fff'
-                   `union`
-                   interval '\x200c' '\x200d'
-                   `union`
-                   interval '\x2070' '\x218f'
-                   `union`
-                   interval '\x2c00' '\x2fef'
-                   `union`
-                   interval '\x3001' '\xd7ff'
-                   `union`
-                   interval '\xf900' '\xFDCF'
-                   `union`
-                   interval '\xfdf0' '\xfffd'
-                   `union`
-                   interval '\x10000' '\xeffff'
+--------------------------------------------------------------------------------
+newtype Partition a = Partition (S.Set (Set a))
 
-xmlNameChar  = xmlNameStartChar
-               `union`
-               singleton '-'
-               `union`
---               singleton '.'
---               `union`
-               interval '0' '9'
-               `union`
-               singleton '\xb7'
-               `union`
-               interval '\x0300' '\x036f'
-               `union`
-               interval '\x203f' '\x2040'
+fromSet :: (Enum a, Bounded a, Ord a) => Set a -> Partition a
+fromSet s 
+    | s == everything = Partition (S.fromList [ s ])
+    | s == empty      = Partition (S.fromList [ s ])
+    | otherwise       = Partition (S.fromList [ s, Data.RangeSet.complement s ])
 
-mathematicalOperators = interval '\x2200' '\x22ff'
+andClasses :: (Enum a, Bounded a, Ord a) =>
+              Partition a -> Partition a -> Partition a
+andClasses (Partition x) (Partition y) =
+    Partition $ S.fromList [ a `intersect` b | a <- S.elems x, b <- S.elems y ]
 
-nameStartChar = xmlNameStartChar `union` mathematicalOperators
-nameChar = xmlNameChar `union` mathematicalOperators `union` singleton '\''
+--------------------------------------------------------------------------------
+-- FIXME: need a better representation than this
+-- Should be a balanced tree
+newtype TotalMap a b = TotalMap [(Set a,b)]
 
-num = interval '0' '9'
+makeTotalMap :: Partition a -> (a -> b) -> TotalMap a b
+makeTotalMap (Partition sets) f =
+    TotalMap [ (set, f (fromJust $ getRepresentative set)) | set <- S.elems sets ]
+                       
+lookup :: Ord a => TotalMap a b -> a -> b
+lookup (TotalMap mappings) a = go mappings
+    where 
+      go []        = error "internal error: not a total map"
+      go ((s,b):m) = if a `memberOf` s then b else go m
 
-space :: Set Char
-space = " \n\t"
+
+      {-
+data Partition a b
+    = Partition { mapping :: Array Int b
+                , classes :: [(a,a,Int)]
+                }
+      deriving Show
+
+everywhere :: Bounded a => b -> Partition a b
+everywhere b
+    = Partition { mapping = array (0,0) [(0,b)]
+                , classes = [(minBound, maxBound, 0)]
+                }
+
+ifThenElse :: (Enum a, Ord a, Bounded a) => Set a -> b -> b -> Partition a b
+ifThenElse (Set ranges) t e =
+    Partition { mapping = array (0,1) [(0,t), (1,e)]
+              , classes = build minBound ranges
+              }
+    where
+      build x []        = if x == maxBound then [] else [(x,maxBound,1)]
+      build x ((i,j):r) = if x < i then (x,pred i,1):tail else tail
+          where tail = (i,j,0):if j == maxBound then [] else build (succ j) r
+
+intersectPartitions :: Partition a b -> Partition a b -> Partition a b
+intersectPartitions 
 -}
