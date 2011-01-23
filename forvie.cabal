@@ -51,7 +51,7 @@ Library
                         Text.Lexer,
                         Text.SyntaxHighlight.Elisp,
                         Text.SyntaxHighlight.Html,
-                        Text.CharacterSet,
+                        Data.CharacterSet,
                         Data.BooleanAlgebra,
                         Data.RangeSet,
                         Text.Regexp,

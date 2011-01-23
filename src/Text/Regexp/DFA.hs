@@ -22,7 +22,7 @@ import qualified Data.IntMap as IM
 import qualified Data.IntSet as IS
 import           Data.Array (Array, array, (!))
 import           Data.RangeSet
-import           Text.CharacterSet
+import           Data.CharacterSet
 import "mtl"     Control.Monad.State
 
 {------------------------------------------------------------------------------}

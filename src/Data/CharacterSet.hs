@@ -1,7 +1,7 @@
 {-# LANGUAGE OverloadedStrings, TypeSynonymInstances #-}
 
 -- |
--- Module      :  Text.CharacterSet
+-- Module      :  Data.CharacterSet
 -- Copyright   :  Robert Atkey 2010
 -- License     :  BSD3
 --
@@ -15,7 +15,7 @@
 -- to be more careful about going off the end of the range of
 -- expressible characters.
 
-module Text.CharacterSet
+module Data.CharacterSet
     (
       -- * Character set type
       CSet

@@ -9,7 +9,7 @@ import qualified Data.IntSet as IS
 import           Data.Array (Array, array, assocs)
 import           Text.Regexp.DFA
 import           Data.RangeSet
-import           Text.CharacterSet
+import           Data.CharacterSet
 import           Language.Haskell.TH
 import           Language.Haskell.TH.Syntax
 

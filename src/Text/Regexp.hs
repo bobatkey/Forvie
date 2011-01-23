@@ -8,13 +8,13 @@ module Text.Regexp
     , oneOrMore
     , tok
     , module Data.BooleanAlgebra
-    , module Text.CharacterSet)
+    , module Data.CharacterSet)
     where
 
 import qualified Data.Set as S
 import           Data.String
 import           Data.RangeSet
-import           Text.CharacterSet
+import           Data.CharacterSet
 import qualified Text.Regexp.DFA as DFA
 import           Data.BooleanAlgebra
 import           Control.Arrow (first)
