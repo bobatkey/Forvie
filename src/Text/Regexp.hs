@@ -15,7 +15,7 @@ import qualified Data.Set as S
 import           Data.String
 import           Data.RangeSet
 import           Data.CharacterSet
-import qualified Text.Regexp.DFA as DFA
+import qualified Data.DFA as DFA
 import           Data.BooleanAlgebra
 import           Control.Arrow (first)
 import           Data.List  (find)

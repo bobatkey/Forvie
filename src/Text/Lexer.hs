@@ -15,9 +15,9 @@ import qualified Control.StreamProcessor as SP
 import           Control.StreamProcessor.Positions
 import           Control.StreamProcessor.Rewindable
 import           Text.Position (Position, Span (Span))
-import qualified Text.Regexp.DFA as DFA
+import qualified Data.DFA as DFA
 import qualified Data.Text as T
-import           Text.Regexp.DFATH
+import           Data.DFA.TH
 import           Language.Haskell.TH
 import           Language.Haskell.TH.Syntax
 import           Text.LexicalSpecification

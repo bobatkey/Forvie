@@ -12,12 +12,16 @@
 
 module Text.SExpr
     ( SExpr (..)
+    , ShowSExpr (showSExpr)
     , cond
     , pprint
     )
     where
 
 import Text.PrettyPrint
+
+class ShowSExpr a where
+    showSExpr :: a -> SExpr
 
 data SExpr = Atom     String
            | IntConst Int

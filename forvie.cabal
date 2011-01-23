@@ -54,6 +54,9 @@ Library
                         Data.CharacterSet,
                         Data.BooleanAlgebra,
                         Data.RangeSet,
+                        Data.DFA,
+                        Data.DFA.TH,
+                        Data.DFA.Elisp,
                         Text.Regexp,
                         Text.SExpr,
                         Text.Position,
@@ -77,9 +80,7 @@ Library
                         blaze-html >= 0.3.2.0
   
   -- Modules not exported by this package.
-  Other-modules:        Text.Regexp.DFATH,
-                        Text.Regexp.DFA,
-                        Control.StreamProcessor.Rewindable,
+  Other-modules:        Control.StreamProcessor.Rewindable,
                         Control.StreamProcessor.Positions
   
   -- Extra tools (e.g. alex, hsc2hs, ...) needed to build the source.

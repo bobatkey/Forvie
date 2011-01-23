@@ -6,7 +6,7 @@
 -- functions. Is there any way to tie the state type to the DFA? Rank
 -- 2 polymorphism?
 
-module Text.Regexp.DFA
+module Data.DFA
     ( FiniteStateAcceptor (..)
     , DFA (..)
     , makeDFA
@@ -102,6 +102,10 @@ data DFA a = DFA { numStates   :: Int
                  , finalStates :: IM.IntMap a
                  }
              deriving Show
+
+instance Functor DFA where
+    fmap f dfa =
+        dfa { finalStates = fmap f (finalStates dfa) }
 
 makeDFA :: FiniteStateAcceptor re => re -> DFA (Result re)
 makeDFA r = DFA next transArray error final

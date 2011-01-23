@@ -1,13 +1,13 @@
 {-# LANGUAGE TemplateHaskell #-}
 
-module Text.Regexp.DFATH
+module Data.DFA.TH
     (makeTransitionFunction)
     where
 
 import qualified Data.IntMap as IM
 import qualified Data.IntSet as IS
 import           Data.Array (Array, array, assocs)
-import           Text.Regexp.DFA
+import           Data.DFA
 import           Data.RangeSet
 import           Data.CharacterSet
 import           Language.Haskell.TH

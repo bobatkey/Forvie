@@ -35,7 +35,7 @@ module Text.LexicalSpecification
     where
 
 import           Language.Haskell.TH.Syntax
-import qualified Text.Regexp.DFA as DFA
+import qualified Data.DFA as DFA
 import           Text.Regexp
 
 -- | A 'LexicalSpecification' represents the specification of the
