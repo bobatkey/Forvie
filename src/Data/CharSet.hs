@@ -5,7 +5,7 @@
 -- Copyright   :  Robert Atkey 2010
 -- License     :  BSD3
 --
--- Maintainer  :  bob.atkey@gmail.com
+-- Maintainer  :  Robert.Atkey@cis.strath.ac.uk
 -- Stability   :  experimental
 -- Portability :  unknown
 --
