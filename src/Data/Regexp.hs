@@ -1,6 +1,17 @@
 {-# LANGUAGE TypeFamilies, FlexibleInstances #-}
 
-module Text.Regexp
+-- |
+-- Module          :  Data.Regexp
+-- Copyright       :  Robert Atkey 2011
+-- License         :  BSD3
+--
+-- Maintainer      :  Robert.Atkey@cis.strath.ac.uk
+-- Stability       :  experimental
+-- Portability     :  unknown
+--
+-- Regular expressions.
+
+module Data.Regexp
     ( Regexp ()
     , (.>>.)
     , star
@@ -8,28 +19,17 @@ module Text.Regexp
     , oneOrMore
     , tok
     , module Data.BooleanAlgebra
-    , module Data.CharSet)
+    )
     where
 
 import qualified Data.Set as S
 import           Data.String
 import           Data.RangeSet
-import           Data.CharSet
 import qualified Data.DFA as DFA
 import           Data.BooleanAlgebra
-import           Control.Arrow (first)
-import           Data.List  (find)
-import           Data.Maybe (isJust)
 
 {------------------------------------------------------------------------------}
--- move this to Text.CharacterSet when the stuff with exhaustive
--- partitions is done
-{-
-andClasses :: S.Set CSet -> S.Set CSet -> S.Set CSet
-andClasses x y = S.fromList [ a .&. b | a <- S.elems x, b <- S.elems y ]
--}
-
-classesN :: Regexp -> Partition Char
+classesN :: (Enum a, Bounded a, Ord a) => Regexp a -> Partition a
 classesN (NSeq ns) = classesNs ns
     where
       classesNs []          = fromSet one
@@ -48,25 +48,16 @@ classesN (NNot n)  = classesN n
 boolToMaybe True  = Just ()
 boolToMaybe False = Nothing
 
-instance DFA.FiniteStateAcceptor Regexp where
-    type DFA.Result Regexp = ()
-    diff c         = diffN c {- norm . diffRE c . forget -}
-    matchesNothing = matchesNothingN {- matchesNothingRE . forget -}
-    matchesEmpty   = boolToMaybe . matchesEmptyN {- boolToMaybe . matchesEmptyRE . forget -}
-    classes        = classesN -- classesRE . forget
-
--- FIXME: this is only here because the 'andClasses' function is
--- here. It should really be in Text.Regexp.DFA. And the 'andClasses'
--- function should be in Text.CharacterSet
-instance (DFA.FiniteStateAcceptor r, DFA.Result r ~ (), Ord a) => DFA.FiniteStateAcceptor [(r,a)] where
-    type DFA.Result [(r,a)] = a
-    diff c         = map (first $ DFA.diff c)
-    matchesNothing = all (DFA.matchesNothing . fst)
-    matchesEmpty   = fmap snd . find (isJust . DFA.matchesEmpty . fst)
-    classes        = foldl andClasses (fromSet one) . map (DFA.classes . fst)
+instance (Ord a, Enum a, Bounded a) => DFA.FiniteStateAcceptor (Regexp a) where
+    type DFA.Alphabet (Regexp a) = a
+    type DFA.Result   (Regexp a) = ()
+    diff c         = diffN c
+    matchesNothing = matchesNothingN
+    matchesEmpty   = boolToMaybe . matchesEmptyN
+    classes        = classesN
 
 {------------------------------------------------------------------------------}
-matchesNothingN :: Regexp -> Bool
+matchesNothingN :: Regexp a -> Bool
 matchesNothingN (NSeq ns) = or $ map matchesNothingN ns
 matchesNothingN (NAlt ns) = and $ map matchesNothingN $ S.elems ns
 matchesNothingN (NTok c)  = Data.RangeSet.null c
@@ -74,7 +65,7 @@ matchesNothingN (NAnd ns) = and $ map matchesNothingN $ S.elems ns
 matchesNothingN (NNot n)  = not $ matchesNothingN n
 matchesNothingN (NStar _) = False
 
-matchesEmptyN :: Regexp -> Bool
+matchesEmptyN :: Regexp a -> Bool
 matchesEmptyN (NSeq ns) = and $ map matchesEmptyN ns
 matchesEmptyN (NAlt ns) = or $ map matchesEmptyN $ S.elems ns
 matchesEmptyN (NTok c)  = False
@@ -82,7 +73,7 @@ matchesEmptyN (NStar _) = True
 matchesEmptyN (NNot n)  = not $ matchesEmptyN n
 matchesEmptyN (NAnd ns) = and $ map matchesEmptyN $ S.elems ns
 
-diffN :: Char -> Regexp -> Regexp
+diffN :: Ord a => a -> Regexp a -> Regexp a
 diffN c (NSeq ns)  = diffNs ns
     where
       diffNs []     = nZero
@@ -98,38 +89,38 @@ diffN c (NAnd ns)  = foldr nAnd nTop $ map (diffN c) $ S.elems ns
 diffN c (NNot n)   = NNot (diffN c n)
 
 {------------------------------------------------------------------------------}
-data Regexp
-    = NSeq  [Regexp]
-    | NAlt  (S.Set Regexp)
-    | NTok  CSet
-    | NAnd  (S.Set Regexp)
-    | NNot  Regexp
-    | NStar Regexp
+data Regexp a
+    = NSeq  [Regexp a]
+    | NAlt  (S.Set (Regexp a))
+    | NTok  (Set a)
+    | NAnd  (S.Set (Regexp a))
+    | NNot  (Regexp a)
+    | NStar (Regexp a)
       deriving (Eq, Ord, Show)
 
-instance IsString Regexp where
+instance IsString (Regexp Char) where
     fromString s = NSeq $ map (NTok . singleton) s
 
-instance BooleanAlgebra Regexp where
+instance Ord a => BooleanAlgebra (Regexp a) where
     (.&.)      = nAnd
     (.|.)      = nAlt
     complement = NNot
     one        = nTop
     zero       = nZero
 
-(.>>.) :: Regexp -> Regexp -> Regexp
+(.>>.) :: Regexp a -> Regexp a -> Regexp a
 (.>>.) = nSeq
 
-star :: Regexp -> Regexp
+star :: Regexp a -> Regexp a
 star n = NStar n
 
-zeroOrMore :: Regexp -> Regexp
+zeroOrMore :: Regexp a -> Regexp a
 zeroOrMore = star
 
-oneOrMore :: Regexp -> Regexp
+oneOrMore :: Regexp a -> Regexp a
 oneOrMore n = n .>>. star n
 
-tok :: CSet -> Regexp
+tok :: Set a -> Regexp a
 tok cs = NTok cs
 
 nEps  = NSeq []

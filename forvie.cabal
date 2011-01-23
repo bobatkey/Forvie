@@ -57,7 +57,7 @@ Library
                         Data.DFA,
                         Data.DFA.TH,
                         Data.DFA.Elisp,
-                        Text.Regexp,
+                        Data.Regexp,
                         Data.SExpr,
                         Text.Position,
                         Text.Layout,

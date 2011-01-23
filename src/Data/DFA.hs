@@ -1,4 +1,4 @@
-{-# LANGUAGE PackageImports, TypeFamilies, FlexibleInstances #-}
+{-# LANGUAGE PackageImports, TypeFamilies, FlexibleInstances, FlexibleContexts #-}
 
 -- implementation of the DFA construction algorithm from Owens et al
 
@@ -17,28 +17,42 @@ module Data.DFA
     where
 
 import           Prelude hiding (lookup)
+import           Control.Arrow (first)
+import           Data.Maybe (isJust)
 import qualified Data.Set as S
 import qualified Data.Map as M
 import qualified Data.IntMap as IM
 import qualified Data.IntSet as IS
 import           Data.Array (Array, array, (!))
 import           Data.RangeSet
+import           Data.BooleanAlgebra (one)
+import           Data.List  (find)
 import "mtl"     Control.Monad.State
 
 {------------------------------------------------------------------------------}
-class Ord r => FiniteStateAcceptor r where
-    type Result r :: *
-    diff           :: Char -> r -> r
-    matchesNothing :: r -> Bool
-    matchesEmpty   :: r -> Maybe (Result r)
-    classes        :: r -> Partition Char
+class (Ord r, Enum (Alphabet r), Ord (Alphabet r), Bounded (Alphabet r))
+    => FiniteStateAcceptor r where
+    type Alphabet r :: *
+    type Result r   :: *
+    diff            :: Alphabet r -> r -> r
+    matchesNothing  :: r -> Bool
+    matchesEmpty    :: r -> Maybe (Result r)
+    classes         :: r -> Partition (Alphabet r)
+
+instance (FiniteStateAcceptor r, Ord a) => FiniteStateAcceptor [(r,a)] where
+    type Alphabet [(r,a)] = Alphabet r
+    type Result [(r,a)] = a
+    diff c         = map (first $ diff c)
+    matchesNothing = all (matchesNothing . fst)
+    matchesEmpty   = fmap snd . find (isJust . matchesEmpty . fst)
+    classes        = foldl andClasses (fromSet one) . map (classes . fst)
 
 {------------------------------------------------------------------------------}
 -- DFA construction
 data ConstructorState re
     = CS { csStates      :: M.Map re Int
          , csNextState   :: Int
-         , csTransitions :: IM.IntMap (TotalMap Char Int)
+         , csTransitions :: IM.IntMap (TotalMap (Alphabet re) Int)
          , csErrorStates :: IS.IntSet
          , csFinalStates :: IM.IntMap (Result re)
          }
@@ -48,7 +62,7 @@ type ConstructorM re a = State (ConstructorState re) a
 haveVisited :: Ord re => re -> ConstructorM re (Maybe Int)
 haveVisited r = get >>= return . M.lookup r . csStates
 
-setTransitions :: Int -> TotalMap Char Int -> ConstructorM re ()
+setTransitions :: FiniteStateAcceptor re => Int -> TotalMap (Alphabet re) Int -> ConstructorM re ()
 setTransitions src map =
     modify $ \s -> s { csTransitions = IM.insert src map (csTransitions s) }
 
@@ -77,19 +91,19 @@ explore q = do
   setTransitions s t
   return s
 
-data DFA a =
+data DFA a b =
     DFA { numStates   :: Int
-        , transitions :: Array Int (TotalMap Char Int)
+        , transitions :: Array Int (TotalMap a Int)
         , errorStates :: IS.IntSet
-        , finalStates :: IM.IntMap a
+        , finalStates :: IM.IntMap b
         }
     deriving Show
 
-instance Functor DFA where
+instance Functor (DFA a) where
     fmap f dfa =
         dfa { finalStates = fmap f (finalStates dfa) }
 
-makeDFA :: FiniteStateAcceptor re => re -> DFA (Result re)
+makeDFA :: FiniteStateAcceptor re => re -> DFA (Alphabet re) (Result re)
 makeDFA r = DFA next transArray error final
     where
       init = CS (M.fromList [ {-(r, 0)-} ]) 0 IM.empty IS.empty IM.empty
@@ -106,7 +120,7 @@ data TransitionResult a
     | Change Int
       deriving (Eq, Ord, Show)
 
-transition :: DFA a -> Int -> Char -> TransitionResult a
+transition :: Ord a => DFA a b -> Int -> a -> TransitionResult b
 transition dfa state c = result
     where
       DFA _ transitions errorStates acceptingStates = dfa
@@ -118,7 +132,7 @@ transition dfa state c = result
                       Nothing -> Change newState
                       Just a  -> Accepting a newState
 
-runDFA :: DFA a -> String -> Maybe a
+runDFA :: Ord a => DFA a b -> [a] -> Maybe b
 runDFA dfa = aux 0
     where
       DFA _ transitions _ final = dfa

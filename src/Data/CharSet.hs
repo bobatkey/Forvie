@@ -2,7 +2,7 @@
 
 -- |
 -- Module      :  Data.CharSet
--- Copyright   :  Robert Atkey 2010
+-- Copyright   :  Robert Atkey 2011
 -- License     :  BSD3
 --
 -- Maintainer  :  Robert.Atkey@cis.strath.ac.uk

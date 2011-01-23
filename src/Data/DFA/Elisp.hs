@@ -11,7 +11,7 @@ import           Data.Char (ord)
 import           Data.SExpr
 import           Data.DFA
 
-makeTransitionFunction :: ShowSExpr a => DFA a -> SExpr
+makeTransitionFunction :: ShowSExpr a => DFA Char a -> SExpr
 makeTransitionFunction dfa =
     SExpr [ Atom "defun"
           , Atom "transition-function"

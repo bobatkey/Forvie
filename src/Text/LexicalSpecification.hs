@@ -19,7 +19,8 @@
 module Text.LexicalSpecification
     ( -- * Specification of Lexical Structure
       LexicalSpecification (..)
-    , module Text.Regexp
+    , module Data.Regexp
+    , module Data.CharSet
       
       -- * Compilation
     , CompiledLexSpec
@@ -36,14 +37,15 @@ module Text.LexicalSpecification
 
 import           Language.Haskell.TH.Syntax
 import qualified Data.DFA as DFA
-import           Text.Regexp
+import           Data.Regexp
+import           Data.CharSet
 
 -- | A 'LexicalSpecification' represents the specification of the
 -- lexical structure of some language. A specification consists of a
 -- list of regular expressions (of type 'Regexp') each with an
 -- associated lexical value. In the case of overlap, the intended
 -- semantics is that entries earlier in the list take precedence.
-type LexicalSpecification tok = [(Regexp, tok)]
+type LexicalSpecification tok = [(Regexp Char, tok)]
 
 
 -- | A rough classification of lexemes, used for syntax highlighting.
@@ -106,7 +108,7 @@ instance SyntaxHighlight (ClassifiedToken kw ident punct op const) where
 -- that has been compiled into a DFA (Deterministic Finite Automaton).
 newtype CompiledLexSpec tok
     = LS { -- | Extract the DFA (Deterministic Finite Automaton) from a compiled lexical specification.
-           lexSpecDFA :: DFA.DFA tok
+           lexSpecDFA :: DFA.DFA Char tok
       }
 
 -- | Compile a lexical structure specification into a DFA
@@ -118,5 +120,3 @@ newtype CompiledLexSpec tok
 -- executed once.
 compileLexicalSpecification :: Ord tok => LexicalSpecification tok -> CompiledLexSpec tok
 compileLexicalSpecification regexps = LS $ DFA.makeDFA regexps
-
---compileLexicalSpecification :: (Ord tok, DFA.RegexpLike r, DFA.Result r ~ tok) => r -> CompiledLexSpec tok
