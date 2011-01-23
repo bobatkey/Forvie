@@ -58,7 +58,7 @@ Library
                         Data.DFA.TH,
                         Data.DFA.Elisp,
                         Text.Regexp,
-                        Text.SExpr,
+                        Data.SExpr,
                         Text.Position,
                         Text.Layout,
                         Control.StreamProcessor,

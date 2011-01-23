@@ -2,12 +2,7 @@ module Text.SyntaxHighlight.Elisp
     ( generateElisp )
     where
 
-import           Data.Array (assocs)
-import qualified Data.IntSet as IS
-import qualified Data.IntMap as IM
-import           Data.RangeSet (ranges)
-import           Data.Char (ord)
-import           Text.SExpr
+import           Data.SExpr
 import           Data.DFA.Elisp (makeTransitionFunction)
 import           Text.LexicalSpecification
 

@@ -7,18 +7,8 @@ import qualified Data.IntSet as IS
 import qualified Data.IntMap as IM
 import           Data.RangeSet (ranges)
 import           Data.Char (ord)
-import           Text.SExpr
+import           Data.SExpr
 import           Data.DFA
-
-{-
-toAtom Comment     = "'comment"
-toAtom Keyword     = "'keyword"
-toAtom Identifier  = "'identifier"
-toAtom Punctuation = "'punctuation"
-toAtom Whitespace  = "'whitespace"
-toAtom Constant    = "'constant"
-toAtom Operator    = "'operator"
--}
 
 makeTransitionFunction :: ShowSExpr a => DFA a -> SExpr
 makeTransitionFunction dfa =

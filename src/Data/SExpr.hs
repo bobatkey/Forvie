@@ -1,5 +1,5 @@
 -- |
--- Module      : Text.SExpr
+-- Module      : Data.SExpr
 -- Copyright   : Robert Atkey 2010
 -- License     : BSD3
 --
@@ -10,7 +10,7 @@
 -- Simple representation of S-expressions, and pretty printing
 -- thereof. Mainly used for generation of Emacs Lisp code.
 
-module Text.SExpr
+module Data.SExpr
     ( SExpr (..)
     , ShowSExpr (showSExpr)
     , cond
