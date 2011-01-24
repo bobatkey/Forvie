@@ -21,7 +21,7 @@ makeTransitionFunction dfa =
           , cond clauses
           ]
     where
-      DFA _ transitions errorStates acceptingStates = dfa
+      DFA transitions errorStates acceptingStates = dfa
       
       clauses = map doState $ assocs transitions
       

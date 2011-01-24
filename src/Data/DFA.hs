@@ -1,18 +1,41 @@
 {-# LANGUAGE PackageImports, TypeFamilies, FlexibleInstances, FlexibleContexts #-}
 
--- implementation of the DFA construction algorithm from Owens et al
-
--- FIXME: make DFA type abstract and provide abstract transition
--- functions. Is there any way to tie the state type to the DFA? Rank
--- 2 polymorphism?
+-- |
+-- Module           :  Data.DFA
+-- Copyright        :  Robert Atkey 2011
+-- License          :  BSD3
+--
+-- Maintainer       :  Robert.Atkey@cis.strath.ac.uk
+-- Stability        :  experimental
+-- Portability      :  unknown
+--
+-- Representation, simulation and construction of Deterministic Finite
+-- Automata (DFAs).
+--
+-- This module uses the 'TotalMap' type from Data.RangeSet to
+-- represent the transition functions for each state. This can provide
+-- a compact representation even when the alphabet of the DFA is
+-- large, e.g. all Unicode codepoints.
+--
+-- Construction of DFA is usually done by using the 'makeDFA'
+-- function. This takes values of types that can be treated as
+-- deterministic finite state machines and constructs a concrete
+-- finite state machine with the same behaviour. The algorithm used is
+-- an abstraction of the one presented by Owens et al in "Regular
+-- expression derivatives re-examined" (FIXME: proper reference).
 
 module Data.DFA
-    ( FiniteStateAcceptor (..)
-    , DFA (..)
-    , makeDFA
+    ( -- * Representation
+      DFA (..)
+      
+      -- * Simulation
     , runDFA
     , TransitionResult (..)
     , transition
+      
+      -- * Construction
+    , FiniteStateAcceptor (..)
+    , makeDFA
     )
     where
 
@@ -32,20 +55,37 @@ import "mtl"     Control.Monad.State
 {------------------------------------------------------------------------------}
 class (Ord r, Enum (Alphabet r), Ord (Alphabet r), Bounded (Alphabet r))
     => FiniteStateAcceptor r where
-    type Alphabet r :: *
-    type Result r   :: *
-    diff            :: Alphabet r -> r -> r
-    matchesNothing  :: r -> Bool
-    matchesEmpty    :: r -> Maybe (Result r)
-    classes         :: r -> Partition (Alphabet r)
+    type Alphabet r  :: *
+    type Result r    :: *
+    advance          :: Alphabet r -> r -> r
+    isErrorState     :: r -> Bool
+    isAcceptingState :: r -> Maybe (Result r)
+    classes          :: r -> Partition (Alphabet r)
 
+-- FIXME: Make a newtype constructor for this.
 instance (FiniteStateAcceptor r, Ord a) => FiniteStateAcceptor [(r,a)] where
     type Alphabet [(r,a)] = Alphabet r
     type Result [(r,a)] = a
-    diff c         = map (first $ diff c)
-    matchesNothing = all (matchesNothing . fst)
-    matchesEmpty   = fmap snd . find (isJust . matchesEmpty . fst)
-    classes        = foldl andClasses (fromSet one) . map (classes . fst)
+    advance c        = map (first $ advance c)
+    isErrorState     = all (isErrorState . fst)
+    isAcceptingState = fmap snd . find (isJust . isAcceptingState . fst)
+    classes          = foldl andClasses (fromSet one) . map (classes . fst)
+
+data DFAWithState a b = DFAWithState (DFA a b) Int
+
+toDFAWithState :: DFA a b -> DFAWithState a b
+toDFAWithState dfa = DFAWithState dfa 0
+
+{-
+instance Ord a => FiniteStateAcceptor (DFAWithState a b) where
+    type Alphabet (DFAWithState a b) = a
+    type Result (DFAWithState a b)   = b
+    advance c (DFAWithState dfa q) = undefined -- FIXME
+    isErrorState (DFAWithState dfa q) = undefined
+    isAcceptingState (DFAWithState dfa q) = undefined
+    classes (DFAWithState dfa q) = undefined -- FIXME: need something to get the domain of a total map?
+-}  
+-- FIXME: can we do DFA minimisation with this setup?
 
 {------------------------------------------------------------------------------}
 -- DFA construction
@@ -72,8 +112,8 @@ newState r = do
   CS states next trans error final <- get
   let states' = M.insert r next states
       next'   = next + 1
-      error'  = if matchesNothing r then IS.insert next error else error
-      final'  = case matchesEmpty r of
+      error'  = if isErrorState r then IS.insert next error else error
+      final'  = case isAcceptingState r of
                   Nothing  -> final
                   Just res -> IM.insert next res final
   put (CS states' next' trans error' final')
@@ -83,7 +123,7 @@ explore :: FiniteStateAcceptor re => re -> ConstructorM re Int
 explore q = do
   s <- newState q
   t <- makeTotalMapM (classes q)
-       $ \c -> do let q' = diff c q
+       $ \c -> do let q' = advance c q
                   visited <- haveVisited q'
                   case visited of
                     Nothing -> explore q'
@@ -91,10 +131,18 @@ explore q = do
   setTransitions s t
   return s
 
+-- | The 'DFA' type has two parameters, the type of input tokens 'a'
+-- and the type of output annotations for final states 'b'.
+--
+-- The states of a DFA are represented as 'Int' values in the range
+-- '[0..n]', where 'n' is the number of states of the
+-- automaton.
 data DFA a b =
-    DFA { numStates   :: Int
-        , transitions :: Array Int (TotalMap a Int)
+    DFA { -- | Transition functions of the DFA, indexed by state number.
+          transitions :: Array Int (TotalMap a Int)
+          -- | The set of error states. Transitions from states in this set will always lead back to this set, annd never to an accepting state.
         , errorStates :: IS.IntSet
+          -- | The set of accepting states, with final values.
         , finalStates :: IM.IntMap b
         }
     deriving Show
@@ -104,9 +152,9 @@ instance Functor (DFA a) where
         dfa { finalStates = fmap f (finalStates dfa) }
 
 makeDFA :: FiniteStateAcceptor re => re -> DFA (Alphabet re) (Result re)
-makeDFA r = DFA next transArray error final
+makeDFA r = DFA transArray error final
     where
-      init = CS (M.fromList [ {-(r, 0)-} ]) 0 IM.empty IS.empty IM.empty
+      init = CS M.empty 0 IM.empty IS.empty IM.empty
 
       CS states next trans error final = execState (explore r) init
 
@@ -123,7 +171,7 @@ data TransitionResult a
 transition :: Ord a => DFA a b -> Int -> a -> TransitionResult b
 transition dfa state c = result
     where
-      DFA _ transitions errorStates acceptingStates = dfa
+      DFA transitions errorStates acceptingStates = dfa
       
       newState = lookup (transitions ! state) c
       
@@ -132,10 +180,14 @@ transition dfa state c = result
                       Nothing -> Change newState
                       Just a  -> Accepting a newState
 
-runDFA :: Ord a => DFA a b -> [a] -> Maybe b
+-- | 
+runDFA :: Ord a =>
+          DFA a b -> -- A concrete representation of a deterministic finite automaton
+          [a] ->     -- A list of input tokens from the DFA's alphabet. Must be finite.
+          Maybe b    -- Acceptance state of the DFA at the end of the input list.
 runDFA dfa = aux 0
     where
-      DFA _ transitions _ final = dfa
+      DFA transitions _ final = dfa
 
       aux s []     = IM.lookup s final
       aux s (c:cs) = aux (lookup (transitions ! s) c) cs

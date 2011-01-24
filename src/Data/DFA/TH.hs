@@ -20,7 +20,7 @@ import           Language.Haskell.TH.Syntax
 -- "TransitionResult"
 
 makeTransitionFunction :: Lift a => DFA Char a -> ExpQ
-makeTransitionFunction (DFA numStates transitions errorStates acceptingStates)
+makeTransitionFunction (DFA transitions errorStates acceptingStates)
     = lamE [ varP state, varP c ]
            (caseE (varE state) (map mkMatch $ assocs transitions))
       where
