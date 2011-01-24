@@ -1,7 +1,7 @@
 {-# LANGUAGE TemplateHaskell, TypeFamilies #-}
 
 -- |
--- Module      : Text.LexicalSpecification
+-- Module      : Language.Forvie.Lexing.Spec
 -- Copyright   : Robert Atkey 2011
 -- License     : BSD3
 --
@@ -16,7 +16,7 @@
 -- with associated tokens, with the intended semantics that entries
 -- earlier in the list take precedence over later ones.
 
-module Text.LexicalSpecification
+module Language.Forvie.Lexing.Spec
     ( -- * Specification of Lexical Structure
       LexicalSpecification (..)
     , module Data.Regexp

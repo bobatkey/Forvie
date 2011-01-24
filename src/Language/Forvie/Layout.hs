@@ -2,7 +2,7 @@
              OverloadedStrings,
              TypeSynonymInstances #-}
 
-module Text.Layout
+module Language.Forvie.Layout
     ( NewlineOr (..)
     , Layout (..)
     , LayoutError (..)
@@ -11,7 +11,7 @@ module Text.Layout
     where
 
 import Control.Category ((>>>))
-import Text.LexicalSpecification
+import Language.Forvie.Lexing.Spec
 import Text.Lexeme
 import Text.Position
 import Control.StreamProcessor

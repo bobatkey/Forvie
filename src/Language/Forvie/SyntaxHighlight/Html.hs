@@ -1,6 +1,6 @@
 {-# LANGUAGE OverloadedStrings #-}
 
-module Text.SyntaxHighlight.Html
+module Language.Forvie.SyntaxHighlight.Html
     ( generateHtml )
     where
 
@@ -16,7 +16,7 @@ import qualified Text.Blaze.Html5.Attributes as A
 
 import           Control.StreamProcessor (SR (..))
 
-import           Text.LexicalSpecification
+import           Language.Forvie.Lexing.Spec
 import           Text.Lexeme
 
 highlightLexeme (Lexeme tok _ txt) =

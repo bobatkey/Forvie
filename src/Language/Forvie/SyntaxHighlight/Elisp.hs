@@ -1,10 +1,10 @@
-module Text.SyntaxHighlight.Elisp
+module Language.Forvie.SyntaxHighlight.Elisp
     ( generateElisp )
     where
 
 import           Data.SExpr
 import           Data.DFA.Elisp (makeTransitionFunction)
-import           Text.LexicalSpecification
+import           Language.Forvie.Lexing.Spec
 
 instance ShowSExpr Classification where
     showSExpr Comment     = Atom "'comment"

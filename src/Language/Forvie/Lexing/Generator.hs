@@ -2,7 +2,7 @@
              TemplateHaskell,
              FlexibleContexts #-}
 
-module Text.Lexer
+module Language.Forvie.Lexing.Generator
     ( LexingError (..)
     , lexerSP 
     , lexerSPStatic
@@ -20,7 +20,7 @@ import qualified Data.Text as T
 import           Data.DFA.TH
 import           Language.Haskell.TH
 import           Language.Haskell.TH.Syntax
-import           Text.LexicalSpecification
+import           Language.Forvie.Lexing.Spec
 import           Text.Lexeme
 
 class LexingError e where
