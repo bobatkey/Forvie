@@ -4,6 +4,7 @@ module Text.Position
     , updatePos
     , Span (..)
     , Regioned (..)
+    , makeSpan
     )
     where
 
