@@ -1,5 +1,17 @@
 {-# LANGUAGE TypeSynonymInstances #-}
 
+-- |
+-- Module          :  Control.StreamProcessor.UTF8
+-- Copyright       :  Robert Atkey 2011
+-- License         :  BSD3
+--
+-- Maintainer      :  Robert.Atkey@cis.strath.ac.uk
+-- Stability       :  experimental
+-- Portability     :  unknown
+--
+-- Stream processors from decoding UTF8-encoded Unicode code-points
+-- from streams of 'Word8' values.
+
 module Control.StreamProcessor.UTF8
     ( decodeUTF8 
     , UTF8DecodeError (..)
@@ -11,6 +23,9 @@ import Data.Word (Word8)
 import Data.Char
 import Data.Bits
 
+-- | Type class encoding the different kinds of UTF8 decoding
+-- error. There is a 'String' instance that provides a default error
+-- message for human consumption.
 class UTF8DecodeError e where
     utf8DecodeError :: String -> e
 
@@ -69,6 +84,10 @@ onChunks = go
       -- text eventually.
 -}
 
+-- | Decode a stream of UTF8-encoded Unicode code-points from a stream
+-- of 'Word8' values. The produced stream consists of a stream of
+-- 'Char' values. The decoding process may throw an error if the input
+-- stream is malformed. At present, error recovery is not possible.
 decodeUTF8 :: UTF8DecodeError e => SP e Word8 Char
 decodeUTF8 = readChar
     where

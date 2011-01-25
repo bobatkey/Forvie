@@ -5,7 +5,7 @@ import Control.StreamProcessor
 import Data.Word
 
 readWord8 :: UnexpectedEOSError e => SR e Word8 Word8
-readWord8 = readInput
+readWord8 = inputValue
 
 readWord32BE :: UnexpectedEOSError e => SR e Word8 Word32
 readWord32BE =
