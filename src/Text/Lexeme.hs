@@ -3,7 +3,7 @@ module Text.Lexeme
     where
 
 import qualified Data.Text as T
-import           Text.Position (Span)
+import           Text.Position (Span, Regioned (..))
 
 data Lexeme tok = Lexeme { lexemeTok  :: tok
                          , lexemePos  :: Span
@@ -11,3 +11,6 @@ data Lexeme tok = Lexeme { lexemeTok  :: tok
                          }
                 deriving (Eq, Ord, Show)
 
+instance Regioned (Lexeme tok) where
+    regionLeft  = regionLeft . lexemePos
+    regionRight = regionRight . lexemePos

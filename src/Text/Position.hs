@@ -1,4 +1,11 @@
-module Text.Position where
+module Text.Position
+    ( Position (..)
+    , initPos
+    , updatePos
+    , Span (..)
+    , Regioned (..)
+    )
+    where
 
 data Position = Position { posCharNum   :: Int
                          , posLineNum   :: Int
@@ -17,22 +24,22 @@ data Span = Span Position Position
             deriving (Eq, Ord, Show)
 
 class Regioned r where
-    posLeft  :: r -> Position
-    posRight :: r -> Position
+    regionLeft  :: r -> Position
+    regionRight :: r -> Position
 
 makeSpan :: (Regioned r, Regioned r') => r -> r' -> Span
-makeSpan x y = Span (posLeft x) (posRight y)
+makeSpan x y = Span (regionLeft x) (regionRight y)
 
 instance Regioned Span where
-  posLeft (Span l _)  = l
-  posRight (Span _ r) = r
+  regionLeft (Span l _)  = l
+  regionRight (Span _ r) = r
   
 {-
 instance Regioned r => Regioned (AnnotRec r f) where
-  posLeft (Annot r _) = posLeft r
-  posRight (Annot r _) = posRight r
+  regionLeft (Annot r _) = regionLeft r
+  regionRight (Annot r _) = regionRight r
 -}
 
 instance Regioned r => Regioned [r] where
-  posLeft (x:_) = posLeft x
-  posRight l    = posRight (last l)
+  regionLeft (x:_) = regionLeft x
+  regionRight l    = regionRight (last l)

@@ -83,7 +83,7 @@ insertLayout = afterBlockOpen
                 = if t == lbrace then
                       Put (LLexeme (Lexeme t p s)) $ go
                   else
-                      Put (IndentCurly (posColumnNum (posLeft p) + 1)) $
+                      Put (IndentCurly (posColumnNum (regionLeft p) + 1)) $
                       Put (LLexeme (Lexeme t p s)) $
                       if blockOpener t then afterBlockOpen else go
 
@@ -92,7 +92,7 @@ insertLayout = afterBlockOpen
             afterNewline' Nothing = eos
             afterNewline' (Just (Lexeme Newline _ _)) = afterNewline
             afterNewline' (Just (Lexeme (Token t) p s))
-                = Put (IndentAngle (posColumnNum (posLeft p) + 1)) $
+                = Put (IndentAngle (posColumnNum (regionLeft p) + 1)) $
                   Put (LLexeme (Lexeme t p s)) $
                   if blockOpener t then afterBlockOpen else go
 
