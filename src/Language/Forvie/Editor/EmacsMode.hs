@@ -1,4 +1,4 @@
-module Language.Forvie.SyntaxHighlight.Elisp
+module Language.Forvie.Editor.EmacsMode
     ( generateElisp )
     where
 

@@ -50,7 +50,7 @@ Library
                         Text.Position,
                         Language.Forvie.Lexing.Spec,
                         Language.Forvie.Lexing.Generator,
-                        Language.Forvie.SyntaxHighlight.Elisp,
+                        Language.Forvie.Editor.EmacsMode,
                         Language.Forvie.SyntaxHighlight.Html,
                         Language.Forvie.Layout,
                         Data.CharSet,
