@@ -1,3 +1,15 @@
+-- |
+-- Module             :  Text.Lexeme
+-- Copyright          :  Robert Atkey 2011
+-- License            :  BSD3
+--
+-- Maintainer         :  Robert.Atkey@cis.strath.ac.uk
+-- Stability          :  experimental
+-- Portability        :  unknown
+--
+-- Representation of lexemes, pieces of text tagged with semantic
+-- tokens.
+
 module Text.Lexeme
     ( Lexeme(..) )
     where
@@ -5,6 +17,16 @@ module Text.Lexeme
 import qualified Data.Text as T
 import           Text.Position (Span, Regioned (..))
 
+-- | A lexeme is an annotated piece of text from a larger body of
+-- text, consisting of three parts:
+--
+--  * A token, indicating the semantic meaning that has been given to
+--  this piece of text.
+--
+--  * A 'Span' indicating the position of this lexeme in the larger
+--  body of text.
+--
+--  * The piece of text itself
 data Lexeme tok = Lexeme { lexemeTok  :: tok
                          , lexemePos  :: Span
                          , lexemeText :: T.Text
