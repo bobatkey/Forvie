@@ -7,6 +7,7 @@ module Language.Forvie.Lexing.Generator
     , lexerSP 
     , lexerSPStatic
     , exceptIgnorable
+    , module Text.Lexeme
     )
     where
 
