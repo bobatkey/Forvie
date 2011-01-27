@@ -1,12 +1,27 @@
-module Control.StreamProcessor.ByteString where
+-- |
+-- Module         :  Control.StreamProcessor.ByteString
+-- Copyright      :  Robert Atkey 2011
+-- License        :  BSD3
+--
+-- Maintainer     :  Robert.Atkey@cis.strath.ac.uk
+-- Stability      :  experimental
+-- Portability    :  unknown
+--
+-- Stream processors for dealing with 'B.ByteString's.
+
+module Control.StreamProcessor.ByteString
+    ( toWord8 )
+    where
 
 import           Data.Word
 import qualified Data.ByteString as B
 import qualified Data.ByteString.Unsafe as BU
 import           Control.StreamProcessor
 
-deChunk :: SP e B.ByteString Word8
-deChunk = go
+-- | Stream processor that reads 'B.ByteString's from the input and
+-- splits them into 'Word8's for the output.
+toWord8 :: SP e B.ByteString Word8
+toWord8 = go
     where
       go = Get handle
       
