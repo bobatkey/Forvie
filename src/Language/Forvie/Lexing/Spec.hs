@@ -9,17 +9,34 @@
 -- Stability   : experimental
 -- Portability : unknown
 --
--- Specification of the lexical structure of programming languages,
--- and its compilation to deterministic finite automaton.
+-- Specification of the lexical structure of programming
+-- languages.
 --
--- A lexical specification consists of a list of regular expressions
--- with associated tokens, with the intended semantics that entries
--- earlier in the list take precedence over later ones.
+-- Lexical Structure is specified using a list of regular expressions,
+-- which are used to break up the input text from left to right,
+-- applying the longest match rule and favouring regular expressions
+-- earlier in the list in case of a tie. Each regular expression has
+-- an attached semantic token which is used to tag the resulting
+-- lexeme.
 
 module Language.Forvie.Lexing.Spec
-    ( -- * Specification of Lexical Structure
+    ( -- * Example
+      -- $example
+      
+      -- * Specification of Lexical Structure
       LexicalSpecification (..)
+      
+    -- ** Exported Modules
+    -- | The "Data.Regexp" module is re-exported from this module for
+    -- convenience when building 'LexicalSpecification's. For regular
+    -- expressions over characters, as used here, "Data.Regexp"
+    -- provides a 'Data.IsString' instance, which can be used with the
+    -- @OverloadedStrings@ pragma to make specifications easier to
+    -- read and write.
     , module Data.Regexp
+
+    -- | The "Data.CharSet" module provides several useful predefined
+    -- sets of characters for use in 'LexicalSpecification's.
     , module Data.CharSet
       
       -- * Compilation
@@ -27,11 +44,10 @@ module Language.Forvie.Lexing.Spec
     , compileLexicalSpecification
     , lexSpecDFA
       
-      -- * Useful token types
+      -- * Useful Token Types
     , Classification (..)
     , SyntaxHighlight (..)
     , Action (..)
-    , ClassifiedToken (..)
     )
     where
 
@@ -40,11 +56,14 @@ import qualified Data.DFA as DFA
 import           Data.Regexp
 import           Data.CharSet
 
+-- $example
+-- FIXME: do an example
+
 -- | A 'LexicalSpecification' represents the specification of the
--- lexical structure of some language. A specification consists of a
--- list of regular expressions (of type 'Regexp') each with an
--- associated lexical value. In the case of overlap, the intended
--- semantics is that entries earlier in the list take precedence.
+-- lexical structure of a language.
+--
+-- A specification consists of a list of regular expressions (of type
+-- 'Regexp') each with an associated semantic value.
 type LexicalSpecification tok = [(Regexp Char, tok)]
 
 
@@ -76,33 +95,27 @@ class SyntaxHighlight tok where
 instance SyntaxHighlight Classification where
     lexicalClass = id
 
+-- | Lexical tokens for programming languages can usually be split
+-- into two broad classifications: tokens that are meaningful for
+-- programs, like keywords and identifiers, and those like whitespace
+-- and comments that are not meaningful. This type provides a way to
+-- tag tokens according to these classes. It is then easy to filter
+-- these out later on before parsing takes place.
+--
+-- Ignored tokens are given a 'Classification' in order to facilitate
+-- syntax highlighting.
 data Action tok
-    = Emit   tok
-    | Ignore Classification
+    = Emit   tok -- ^ Meaningful tokens.
+    | Ignore Classification -- ^ Other tokens, with a classification.
     deriving (Eq, Ord, Show)
 
 instance SyntaxHighlight tok => SyntaxHighlight (Action tok) where
     lexicalClass (Emit tok)   = lexicalClass tok
-    lexicalClass (Ignore typ) = lexicalClass typ
+    lexicalClass (Ignore typ) = typ
 
 instance Lift tok => Lift (Action tok) where
     lift (Emit tok)   = [| Emit $(lift tok) |]
     lift (Ignore typ) = [| Ignore $(lift typ) |]
-
-data ClassifiedToken kw ident punct op const
-    = TokKeyword kw
-    | TokIdentifier ident
-    | TokPunctuation punct
-    | TokOperator op
-    | TokConstant const
-    deriving (Eq, Ord, Show)
-
-instance SyntaxHighlight (ClassifiedToken kw ident punct op const) where
-    lexicalClass (TokKeyword _)     = Keyword
-    lexicalClass (TokIdentifier _)  = Identifier
-    lexicalClass (TokPunctuation _) = Punctuation
-    lexicalClass (TokOperator _)    = Operator
-    lexicalClass (TokConstant _)    = Constant
 
 -- | The 'CompiledLexSpec' type represents a lexical specification
 -- that has been compiled into a DFA (Deterministic Finite Automaton).
