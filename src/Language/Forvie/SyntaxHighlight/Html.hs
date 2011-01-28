@@ -1,12 +1,20 @@
 {-# LANGUAGE OverloadedStrings #-}
 
+-- |
+-- Module         :  Language.Forvie.SyntaxHighlight.Html
+-- Copyright      :  Robert Atkey 2011
+-- License        :  BSD3
+--
+-- Maintainer     :  Robert.Atkey@cis.strath.ac.uk
+-- Stability      :  experimental
+-- Portability    :  unknown
+--
+-- Functions for converting 'Lexeme's to HTML, classified according to
+-- the 'SyntaxHighlight' class.
+
 module Language.Forvie.SyntaxHighlight.Html
     ( generateHtml )
     where
-
--- FIXME: instead of assuming that the whitespace (and comments) have
--- been left in the lexeme stream, compute the necessary advance from
--- the position information??
 
 import           Data.Monoid
 
@@ -32,6 +40,24 @@ classOf tok =
       Constant    -> H.span ! A.class_ "constant"
       Whitespace  -> \x -> x
 
+-- | Convert a stream of 'Lexeme's tagged with 'SyntaxHighlight'able
+-- tokens into a piece of @pre@formatted HTML. Each non-'WhiteSpace'
+-- 'Lexeme' is wrapped in a @\<span class=\"XXX\"\>@ element, where the
+-- class depends on the 'Classification' of the Lexeme:
+--
+--    ['Comment'] becomes @comment@.
+--
+--    ['Keyword'] becomes @keyword@.
+--
+--    ['Identifier'] becomes @identifier@.
+--
+--    ['Punctuation'] becomes @punctuation@.
+--
+--    ['Operator'] becomes @operator@.
+--
+--    ['Constant'] becomes @constant@.
+-- 
+-- The entire output is then wrapped in a @\<pre\>@ tag.
 generateHtml :: SyntaxHighlight tok => SR e (Lexeme tok) H.Html
 generateHtml = reader mempty
     where
@@ -39,3 +65,4 @@ generateHtml = reader mempty
           where
             f Nothing       = Yield (H.pre document)
             f (Just lexeme) = reader (document `mappend` highlightLexeme lexeme)
+

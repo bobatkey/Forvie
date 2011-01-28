@@ -105,7 +105,8 @@ import Control.Applicative
 -- Stream processors can also be constructed by composition: 'SP' is
 -- an instance of 'Control.Category.Category'.
 --
--- FIXME: talk about inadequacies in this encoding
+-- FIXME: talk about inadequacies in this encoding (shouldn't demand
+-- input after recieving Nothing, ...)
 data SP e a b = Get (Maybe a -> SP e a b)
               | Error e
               | Put b (SP e a b)
