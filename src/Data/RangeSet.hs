@@ -56,7 +56,7 @@ import           Data.Maybe (fromJust)
 import           Data.String (IsString)
 import           Data.BooleanAlgebra
 import           Data.Functor
-import           Test.QuickCheck hiding (ranges)
+--import           Test.QuickCheck hiding (ranges)
 import           Data.Array hiding (assocs)
 
 -- | A subset of the given type. Stored as a list of ranges.
@@ -74,8 +74,8 @@ isNormalForm (Set l) = check1 l
 
 -- FIXME: this sucks, would be (slightly) better to generate a list of
 -- ranges and then union them
-instance (Ord a, Arbitrary a) => Arbitrary (Set a) where
-    arbitrary = (Set <$> arbitrary) `suchThat` isNormalForm
+--instance (Ord a, Arbitrary a) => Arbitrary (Set a) where
+--    arbitrary = (Set <$> arbitrary) `suchThat` isNormalForm
 
 instance (Enum a, Ord a, Bounded a) => BooleanAlgebra (Set a) where
     (.&.)      = intersect
@@ -166,7 +166,7 @@ intersect c1 c2 = Data.RangeSet.complement (Data.RangeSet.complement c1 `union` 
 
 {------------------------------------------------------------------------------}
 -- FIXME: Need to do something with this
-prop_interval a b c = a <= c && c <= b ==> c `memberOf` (interval a b)
+--prop_interval a b c = a <= c && c <= b ==> c `memberOf` (interval a b)
 
 --------------------------------------------------------------------------------
 newtype Partition a = Partition (S.Set (Set a))
