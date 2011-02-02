@@ -38,6 +38,7 @@ classOf tok =
       Punctuation -> H.span ! A.class_ "punctuation"
       Operator    -> H.span ! A.class_ "operator"
       Constant    -> H.span ! A.class_ "constant"
+      Constructor -> H.span ! A.class_ "constructor"
       Whitespace  -> \x -> x
 
 -- | Convert a stream of 'Lexeme's tagged with 'SyntaxHighlight'able
@@ -57,6 +58,8 @@ classOf tok =
 --
 --    ['Constant'] becomes @constant@.
 -- 
+--    ['Constructor'] becomes @constructor@.
+--
 -- The entire output is then wrapped in a @\<pre\>@ tag.
 generateHtml :: SyntaxHighlight tok => SR e (Lexeme tok) H.Html
 generateHtml = reader mempty

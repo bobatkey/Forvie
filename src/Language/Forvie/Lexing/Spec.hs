@@ -76,6 +76,7 @@ data Classification
     | Whitespace   -- ^ Whitespace: spaces, tabs, newlines
     | Constant     -- ^ Constants, usually strings and integers
     | Operator     -- ^ Usually infix operators
+    | Constructor  -- ^ Constructors of data
     deriving (Eq, Ord, Show)
 
 instance Lift Classification where
@@ -86,6 +87,7 @@ instance Lift Classification where
     lift Whitespace  = [| Whitespace |]
     lift Operator    = [| Operator |]
     lift Constant    = [| Constant |]
+    lift Constructor = [| Constructor |]
 
 -- | Instances of this class are able to classify themselves into a
 -- specific 'Classification' for the purposes of syntax highlighting.

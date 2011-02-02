@@ -8,7 +8,8 @@
 	((eq classification 'identifier)  'default)
 	((eq classification 'whitespace)  'default)
 	((eq classification 'constant)    'font-lock-constant-face)
-	((eq classification 'operator)    'font-lock-keyword-face)))
+	((eq classification 'operator)    'font-lock-keyword-face)
+	((eq classification 'constructor) 'font-lock-constant-face)))
 
 ;; lexer state consists of:
 ;;   the start of the current lexeme

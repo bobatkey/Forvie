@@ -14,6 +14,7 @@ instance ShowSExpr Classification where
     showSExpr Whitespace  = Atom "'whitespace"
     showSExpr Constant    = Atom "'constant"
     showSExpr Operator    = Atom "'operator"
+    showSExpr Constructor = Atom "'constructor"
 
 generateElisp :: SyntaxHighlight tok =>
                  CompiledLexSpec tok ->
