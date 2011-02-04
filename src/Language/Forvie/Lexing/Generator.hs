@@ -3,7 +3,7 @@
              FlexibleContexts #-}
 
 -- |
--- Module         :  Language.Forvie.SyntaxHighlight.Html
+-- Module         :  Language.Forvie.Lexing.Generator
 -- Copyright      :  Robert Atkey 2011
 -- License        :  BSD3
 --
