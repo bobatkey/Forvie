@@ -28,7 +28,7 @@ import           Language.Forvie.Lexing.Spec
 import           Text.Lexeme
 
 highlightLexeme (Lexeme tok _ txt) =
-    classOf tok $ H.text txt
+    classOf tok $ H.toHtml txt
 
 classOf tok =
     case lexicalClass tok of
