@@ -27,8 +27,8 @@ data SExpr = Atom     String
            | IntConst Int
            | SExpr    [SExpr]
 
-cond :: [([SExpr], SExpr)] -> SExpr
-cond clauses = SExpr (Atom "cond" : map (\(t,e) -> SExpr [ SExpr t, e]) clauses)
+cond :: [(SExpr, SExpr)] -> SExpr
+cond clauses = SExpr (Atom "cond" : map (\(t,e) -> SExpr [ t, e]) clauses)
 
 pprint :: SExpr -> Doc
 pprint (Atom s)       = text s
