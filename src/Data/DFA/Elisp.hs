@@ -12,10 +12,10 @@ import           Data.Maybe (mapMaybe)
 import           Data.SExpr
 import           Data.DFA
 
-makeTransitionFunction :: ShowSExpr a => DFA Char a -> SExpr
-makeTransitionFunction dfa =
+makeTransitionFunction :: ShowSExpr a => String -> DFA Char a -> SExpr
+makeTransitionFunction name dfa =
     SExpr [ Atom "defun"
-          , Atom "transition-function"
+          , Atom name
           , SExpr [ Atom "state"
                   , Atom "char"
                   ]

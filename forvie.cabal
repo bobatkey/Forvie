@@ -42,6 +42,7 @@ Build-type:          Simple
 -- Constraint on the version of Cabal needed to build this package.
 Cabal-version:       >=1.2
 
+data-files:          elisp/mode-template.el
 
 Library
   Hs-Source-Dirs:	src
@@ -81,7 +82,9 @@ Library
   
   -- Modules not exported by this package.
   Other-modules:        Control.StreamProcessor.Rewindable,
-                        Control.StreamProcessor.Positions
+                        Control.StreamProcessor.Positions,
+                        Language.Forvie.Util.Templater,
+                        Paths_forvie
   
   -- Extra tools (e.g. alex, hsc2hs, ...) needed to build the source.
   -- Build-tools:         
