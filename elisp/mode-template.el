@@ -13,6 +13,7 @@
 
 ;; FIXME: replace 'org-unmodified' with 'with-slient-modifications'.
 ;; See: http://stackoverflow.com/questions/2699857/emacs-how-to-intelligently-handle-buffer-modified-when-setting-text-properties
+(require 'org)
 
 ;; lexer state consists of:
 ;;   the start of the current lexeme
@@ -52,7 +53,7 @@
 		      (t
 		       (let ((lexeme-end  (car current-match))
 			     (lexeme-type (cdr current-match)))
-			 (put-text-property lexeme-start lexeme-end 'face (classification-to-face lexeme-type))
+			 (put-text-property lexeme-start lexeme-end 'face ($modename$-classification-to-face lexeme-type))
 			 (setq position lexeme-end)
 			 (setq current-match nil)
 			 (setq state 0)
@@ -76,7 +77,7 @@
 			   ;; Lexing success
 			   (let ((lexeme-end  (car current-match))
 				 (lexeme-type (cdr current-match)))
-			     (put-text-property lexeme-start lexeme-end 'face (classification-to-face lexeme-type))
+			     (put-text-property lexeme-start lexeme-end 'face ($modename$-classification-to-face lexeme-type))
 			     (setq position lexeme-end)
 			     (setq current-match nil)
 			     (setq state 0)
@@ -109,7 +110,7 @@
   (setq mode-name "$modename$")
   (set-input-method "TeX")
 
-  (lex-buffer)
+  ($modename$-lex-buffer)
   (add-hook 'after-change-functions '$modename$-do-lexing nil t)
 ;  (run-mode-hooks)
 )
