@@ -52,16 +52,22 @@ Library
                         Language.Forvie.Lexing.Spec,
                         Language.Forvie.Lexing.Generator,
                         Language.Forvie.Editor.EmacsMode,
+                        Language.Forvie.Parsing.Grammar,
+                        Language.Forvie.Parsing.EarleyParser,
+                        Language.Forvie.Parsing.Arrow,
                         Language.Forvie.SyntaxHighlight.Html,
                         Language.Forvie.Layout,
                         Data.CharSet,
                         Data.BooleanAlgebra,
                         Data.RangeSet,
+                        Data.Knot,
                         Data.DFA,
                         Data.DFA.TH,
                         Data.DFA.Elisp,
                         Data.Regexp,
                         Data.SExpr,
+                        Data.Type.Eq,
+                        Data.Type.Show,
                         Control.StreamProcessor,
                         Control.StreamProcessor.ByteString,
                         Control.StreamProcessor.UTF8,
@@ -78,7 +84,8 @@ Library
                         mtl >= 2.0.1.0,
                         bytestring >= 0.9.1.5,
                         pretty >= 1.0.1.1,
-                        blaze-html >= 0.3.2.0
+                        blaze-html >= 0.3.2.0,
+                        type-equality >= 0.1.0
   
   -- Modules not exported by this package.
   Other-modules:        Control.StreamProcessor.Rewindable,
