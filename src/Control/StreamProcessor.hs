@@ -63,6 +63,7 @@ module Control.StreamProcessor
       
     -- ** Running Stream Readers
     , onList
+    , onText
 
     -- * Interfacing Processors and Readers
     , (>>|)
@@ -74,6 +75,8 @@ module Control.StreamProcessor
 import Prelude hiding ((.), id, iterate)
 import Control.Category
 import Control.Applicative
+
+import qualified Data.Text as T
 
 -- $example
 -- FIXME: do an example
@@ -288,3 +291,10 @@ onList sr l = go l sr
       go (a:as) (Read k)      = go as (k (Just a))
       go as     (ReadError e) = Left e
       go as     (Yield b)     = Right b
+
+onText :: SR e Char b -> T.Text -> Either e b
+onText (Read k)      t = case T.uncons t of
+                           Nothing    -> onText (k Nothing) t
+                           Just (c,t) -> onText (k (Just c)) t
+onText (ReadError e) t = Left e
+onText (Yield b)     _ = Right b
