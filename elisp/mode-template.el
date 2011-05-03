@@ -1,3 +1,6 @@
+(defun $modename$-transition-function (state char)
+  (aref (aref $modename$-transition-function-vector state) char))
+
 ;; FIXME: it would probably be better to use some built-in Emacs-y
 ;; customisation stuff to do this bit. And to rewrite
 ;; transition-function to use it without having this indirection.
@@ -96,7 +99,7 @@
   (if $modename$-lexing-timer
       (cancel-timer $modename$-lexing-timer))
   (setq $modename$-lexing-timer
-	(run-with-idle-timer 0.5 nil #'$modename$-lex-buffer))) ;; FIXME: abstract out the delay here
+	(run-with-idle-timer 0.2 nil #'$modename$-lex-buffer))) ;; FIXME: abstract out the delay here
 
 (defun $modename$-do-lexing (start end len)
   (if (not $modename$-lexing-underway)

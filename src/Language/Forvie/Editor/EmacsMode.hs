@@ -8,7 +8,7 @@ import           Paths_forvie
 import           System.IO
 import           Data.SExpr
 import           Text.PrettyPrint (render)
-import           Data.DFA.Elisp (makeTransitionFunction)
+import           Data.DFA.Elisp (makeTransitionFunction, makeTransitionFunctionCharTables)
 import           Language.Forvie.Lexing.Spec
 import           Language.Forvie.Util.Templater
 
@@ -28,9 +28,9 @@ instance ShowSExpr Classification where
 generateElisp :: SyntaxHighlight tok =>
                  String ->
                  CompiledLexSpec tok ->
-                 SExpr
+                 [SExpr]
 generateElisp name =
-    makeTransitionFunction name . fmap lexicalClass . lexSpecDFA
+    makeTransitionFunctionCharTables name . fmap lexicalClass . lexSpecDFA
 
 -- plan: generate an emacs mode by
 --  (a) making the transition function code
@@ -39,7 +39,7 @@ generateElisp name =
 
 generateEmacsMode lexSpec modename fileregexp =
     do templateFilename <- getDataFileName "elisp/mode-template.el"
-       putStrLn $ render $ pprint $ generateElisp (T.unpack modename ++ "-transition-function") lexSpec
+       mapM_ (putStrLn . render . pprint) (generateElisp (T.unpack modename ++ "-transition-function") lexSpec)
        result <- onFiles templateFilename 8192 $ applyVariableSubstitution subst
        case result of
          Nothing    -> return ()
