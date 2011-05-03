@@ -1,5 +1,3 @@
-(defun $modename$-transition-function (state char)
-  (aref (aref $modename$-transition-function-vector state) char))
 
 ;; FIXME: it would probably be better to use some built-in Emacs-y
 ;; customisation stuff to do this bit. And to rewrite

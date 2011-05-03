@@ -18,7 +18,7 @@ import           Data.DFA
 makeTransitionFunctionCharTables :: ShowSExpr a => String -> DFA Char a -> [SExpr]
 makeTransitionFunctionCharTables prefix dfa =
     [ SExpr [ Atom "defconst"
-            , Atom (prefix ++ "-vector")
+            , Atom (prefix ++ "-transition-vector")
             , SExpr ([ Atom "let", SExpr letBindings ]
                      ++
                      concatMap charTableEntries (assocs transitions)
@@ -26,11 +26,22 @@ makeTransitionFunctionCharTables prefix dfa =
                      [ SExpr (Atom "vector":map (Atom . charTableName) (range $ bounds transitions))
                      ])
             ]
+    , SExpr [ Atom "defun"
+            , Atom (prefix ++ "-transition-function")
+            , SExpr [ Atom "state", Atom "char" ]
+            , SExpr [ Atom "aref"
+                    , SExpr [ Atom "aref"
+                            , Atom (prefix ++ "-transition-vector")
+                            , Atom "state"
+                            ]
+                    , Atom "char"
+                    ]
+            ]
     ]
     where
       DFA transitions errorStates acceptingStates = dfa
 
-      charTableName q = "statetable-" ++ show q
+      charTableName q = "s-" ++ show q
 
       letBindings = map makeLetBinding $ range $ bounds transitions
           where makeLetBinding q = SExpr [ Atom (charTableName q)
@@ -67,15 +78,16 @@ makeTransitionFunctionCharTables prefix dfa =
                                        return $ map (\(low,high) -> (low, high, res)) (ranges cset)
 
 
-makeTransitionFunction :: ShowSExpr a => String -> DFA Char a -> SExpr
+makeTransitionFunction :: ShowSExpr a => String -> DFA Char a -> [SExpr]
 makeTransitionFunction name dfa =
-    SExpr [ Atom "defun"
-          , Atom name
-          , SExpr [ Atom "state"
-                  , Atom "char"
-                  ]
-          , cond clauses
-          ]
+    [ SExpr [ Atom "defun"
+            , Atom (name ++ "-transition-function")
+            , SExpr [ Atom "state"
+                    , Atom "char"
+                    ]
+            , cond clauses
+            ]
+    ]
     where
       DFA transitions errorStates acceptingStates = dfa
       

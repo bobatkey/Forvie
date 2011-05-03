@@ -39,7 +39,7 @@ generateElisp name =
 
 generateEmacsMode lexSpec modename fileregexp =
     do templateFilename <- getDataFileName "elisp/mode-template.el"
-       mapM_ (putStrLn . render . pprint) (generateElisp (T.unpack modename ++ "-transition-function") lexSpec)
+       mapM_ (putStrLn . render . pprint) (generateElisp (T.unpack modename) lexSpec)
        result <- onFiles templateFilename 8192 $ applyVariableSubstitution subst
        case result of
          Nothing    -> return ()
