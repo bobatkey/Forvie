@@ -3,7 +3,6 @@
 module Language.Forvie.Parsing.EarleyParser where
 
 import Control.Applicative
-import qualified Data.Map as M
 import qualified Data.IntMap as IM
 import Data.Maybe (fromMaybe, mapMaybe)
 import Data.Text (Text)
@@ -120,7 +119,7 @@ data Result v nt where
 
 --------------------------------------------------------------------------------
 data St rhs nt tok f v t
-    = St { parsed          :: M.Map Int [Result v nt]       -- start point, nonterminal recognised
+    = St { parsed          :: IM.IntMap [Result v nt]       -- start point, nonterminal recognised
          , called          :: [SomeCall nt]                 -- non-terminals we have predicted at this point
          , waitingForCall  :: [WaitingForCall rhs nt tok f v t] -- processes that are waiting for the completion of a non-terminal
          , waitingForToken :: [WaitingForToken rhs nt tok f v t] -- processes that are waiting for a token
@@ -128,7 +127,7 @@ data St rhs nt tok f v t
          }
 
 initState :: St rhs nt tok f v t
-initState = St { parsed          = M.empty
+initState = St { parsed          = IM.empty
                , called          = []
                , waitingForCall  = []
                , waitingForToken = []
@@ -147,7 +146,7 @@ checkKnown :: forall rhs nt tok f v b t m.
               Int
            -> Call nt b
            -> M rhs nt tok f v t m (Maybe (v b))
-checkKnown i call = join . fmap findCall . M.lookup i <$> gets parsed
+checkKnown i call = join . fmap findCall . IM.lookup i <$> gets parsed
     where
       findCall :: [Result v nt] -> Maybe (v b)
       findCall []                         = Nothing
@@ -161,7 +160,7 @@ addKnown :: Monad m =>
          -> v a
          -> M rhs nt tok f v t m ()
 addKnown i call b =
-    modify $ \s -> s { parsed = M.alter (Just . (Result call b:) . fromMaybe []) i (parsed s) }
+    modify $ \s -> s { parsed = IM.alter (Just . (Result call b:) . fromMaybe []) i (parsed s) }
 
 addWaitingForChar :: Monad m =>
                      tok
