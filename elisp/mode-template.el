@@ -50,6 +50,7 @@
 		       (progn
 			 (message "Lexing failure at EOF")
 			 (put-text-property lexeme-start final-position 'face 'default)
+			 (put-text-property lexeme-start final-position 'face '(:underline "red"))
 			 (throw 'abort-lexing t)))
 		      (t
 		       (let ((lexeme-end  (car current-match))
@@ -70,10 +71,11 @@
 			 (setq current-match (cons position (car (cdr (cdr result))))))
 			((eq (car result) 'error)
 			 (if (null current-match)
-			     ;; Lexing failure, abort (FIXME: draw a pretty underline)
+ 			     ;; Lexing failure, abort. FIXME: attempt to determine what states were reachable from the previous state
 			     (progn
 			       (message (format "Lexing failure at position %d" position))
 			       (put-text-property lexeme-start final-position 'face 'default)
+			       (put-text-property lexeme-start final-position 'face '(:underline "red"))
 			       (throw 'abort-lexing t))
 			   ;; Lexing success
 			   (let ((lexeme-end  (car current-match))
