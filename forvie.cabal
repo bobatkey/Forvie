@@ -55,6 +55,7 @@ Library
                         Language.Forvie.Parsing.Grammar,
                         Language.Forvie.Parsing.EarleyParser,
                         Language.Forvie.Parsing.Arrow,
+                        Language.Forvie.Parsing.Monad,
                         Language.Forvie.SyntaxHighlight.Html,
                         Language.Forvie.Layout,
                         Data.CharSet,

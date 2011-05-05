@@ -4,6 +4,7 @@ module Language.Forvie.Parsing.EarleyParser where
 
 import Control.Applicative
 import qualified Data.Map as M
+import qualified Data.IntMap as IM
 import Data.Maybe (fromMaybe, mapMaybe)
 import Data.Text (Text)
 import Data.Type.Eq
@@ -41,6 +42,7 @@ instance Show3 nt => Show2 (RetAddr nt t) where
 
 --------------------------------------------------------------------------------
 parse :: (Eq3 nt,
+          Show3 nt,
           Eq  tok,
           Eq  a,
           Show a,
@@ -51,18 +53,44 @@ parse :: (Eq3 nt,
       -> nt a t
       -> a
       -> m [f v t]
-parse grammar r a = expander M.empty 0 [Item rhs TopLevel]
+parse grammar r a = expander IM.empty 0 [Item rhs TopLevel]
     where
       rhs = getRHS grammar (Call r a)
 
       expander previous i ps = do
         (wfc, wft, c) <- expand grammar previous i ps
         t <- getInput
-        consumer (M.insert i wfc previous) (i+1) wft c t
+        consumer (IM.insert i wfc previous) (i+1) wft c t
 
       consumer previous i wft c Nothing  = return c
       consumer previous i wft _ (Just t) =
           expander previous i (advance t wft)
+
+parseList :: (Eq3 nt,
+              Show3 nt,
+              Eq  tok,
+              Show tok,
+              Eq  a,
+              Show a,
+              RHS rhs,
+              ParseResultsMonad f v m,
+              Ord tok) =>
+             Grammar rhs f nt tok
+          -> nt a t
+          -> a
+          -> [Lexeme tok]
+          -> m [f v t]
+parseList grammar r a = expander IM.empty 0 [Item rhs TopLevel]
+    where
+      rhs = getRHS grammar (Call r a)
+
+      expander previous i ps input = do
+        (wfc, wft, c) <- expand grammar previous i ps
+        consumer (IM.insert i wfc previous) (i+1) wft c input
+
+      consumer previous i wft c []  = return c
+      consumer previous i wft _ (t:ts) =
+          {-trace ("\nAdvancing on " ++ show (lexemeText t)) $-} expander previous i (advance t wft) ts
 
 --------------------------------------------------------------------------------
 -- 't' for toplevel (and 'v' for variable)
@@ -107,7 +135,7 @@ initState = St { parsed          = M.empty
                , completeParse   = []
                }
 
-type Previous rhs nt tok f v t = M.Map Int [WaitingForCall rhs nt tok f v t]
+type Previous rhs nt tok f v t = IM.IntMap [WaitingForCall rhs nt tok f v t]
 
 type M rhs nt tok f v t m a =
     ReaderT (Previous rhs nt tok f v t)
@@ -147,6 +175,7 @@ recordCalled :: (Eq3 nt, Monad m, Functor m) =>
                 Call nt a
              -> M rhs nt tok f v t m Bool
 recordCalled call = do
+  --trace ("recordCalled") $ return ()
   p <- elem (SomeCall call) <$> gets called
   unless p $ modify $ \s -> s { called = SomeCall call : called s }
   return p
@@ -171,7 +200,7 @@ getCompletions :: forall rhs nt tok f v t a m.
                -> M rhs nt tok f v t m [Item rhs nt tok f v t]
 getCompletions i j call a
     | i == j    = mapMaybe extract <$> gets waitingForCall
-    | otherwise = mapMaybe extract . fromMaybe [] . M.lookup i <$> ask
+    | otherwise = mapMaybe extract . fromMaybe [] . IM.lookup i <$> ask
     where
       extract :: WaitingForCall rhs nt tok f v t -> Maybe (Item rhs nt tok f v t)
       extract (WfCallRA call' k ra) = do Refl <- call === call'
@@ -195,7 +224,7 @@ expand grammar previous j worklist = do
      execStateT (runReaderT (process worklist)
                             previous)
                 initState
-  --trace ("(length wfc, length wft) = " ++ show (length wfc, length wft)) $ return ()
+  --trace ("(j, length wfc, length wft) = " ++ show (j, length wfc, M.size wft)) $ return ()
   return (wfc, wft, complete)
     where
       process :: [Item rhs nt tok f v t] -> M rhs nt tok f v t m ()
@@ -220,8 +249,9 @@ expand grammar previous j worklist = do
         case known of
           Nothing -> do v <- lift $ lift (newResult i j t)
                         addKnown i call v
-                        --trace ("Completing " ++ show (i,j)) $ return ()
-                        getCompletions i j call v
+                        l <- getCompletions i j call v
+                        --trace ("Completing " ++ show (i,j) ++ " " ++ show2 call ++ " => " ++ show (length l)) $ return ()
+                        return l
           Just v  -> do lift $ lift (addResult v t)
                         return []
 

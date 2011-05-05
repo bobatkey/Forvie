@@ -7,6 +7,12 @@ module Language.Forvie.Parsing.Arrow
     , check
     , list
     , nonEmptyList
+    , PrecLevel
+    , reset
+    , atLevel
+    , down
+    , nt'
+    , setLevel
     )
     where
 
@@ -144,3 +150,25 @@ lfstar c p q (WfToken cs r) =
     Just $ WfToken cs (r >>> Star (\s -> (s,c)) p q)
 lfstar c p q (WfCall _ nt r) =
     Just $ WfCall True nt (r >>> Star (\s -> (s,c)) p q)
+
+--------------------------------------------------------------------------------
+-- FIXME: move this elsewhere
+data PrecLevel = P !Int
+               deriving (Eq, Show)
+
+atLevel :: Int -> ArrowRHS nt tok v PrecLevel a -> ArrowRHS nt tok v PrecLevel a
+atLevel i p = proc (P l) -> do
+                check -< (i <= l)
+                p -< P i
+
+down :: ArrowRHS nt tok v PrecLevel a -> ArrowRHS nt tok v PrecLevel a
+down rhs = arr (\(P p) -> P (p-1)) >>> rhs
+
+setLevel :: Int -> ArrowRHS nt tok v PrecLevel b -> ArrowRHS nt tok v a b
+setLevel l rhs = arr (const (P l)) >>> rhs
+
+reset = setLevel 10
+
+nt' :: nt () b -> ArrowRHS nt tok v a (v b)
+nt' nonterminal = arr (const ()) >>> nt nonterminal
+
