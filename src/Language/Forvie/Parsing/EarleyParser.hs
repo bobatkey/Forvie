@@ -251,14 +251,14 @@ expand grammar j worklist = do
         addComplete t
         return []
 
-      processC (Local call) (Accept t) =
-          do known <- checkKnown j call
-             case known of
-               Nothing -> do v <- lift $ newResult j j t
-                             addKnown j call v
-                             map (mkItem v) . findCalls call <$> gets waitingForCall
-               Just v  -> do lift $ addResult v t
-                             return []
+      processC (Local call) (Accept t) = do
+        known <- checkKnown j call
+        case known of
+          Nothing -> do v <- lift $ newResult j j t
+                        addKnown j call v
+                        map (mkItem v) . findCalls call <$> gets waitingForCall
+          Just v  -> do lift $ addResult v t
+                        return []
 
       processC (Previous i call l) (Accept t) = do
         known <- checkKnown i call
