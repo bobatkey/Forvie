@@ -27,9 +27,9 @@ import           Text.Position (Span, Regioned (..))
 --  body of text.
 --
 --  * The piece of text itself
-data Lexeme tok = Lexeme { lexemeTok  :: tok
-                         , lexemePos  :: Span
-                         , lexemeText :: T.Text
+data Lexeme tok = Lexeme { lexemeTok  :: !tok
+                         , lexemePos  :: !Span
+                         , lexemeText :: !T.Text
                          }
                 deriving (Eq, Ord, Show)
 

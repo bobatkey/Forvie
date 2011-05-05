@@ -8,9 +8,9 @@ module Text.Position
     )
     where
 
-data Position = Position { posCharNum   :: Int
-                         , posLineNum   :: Int
-                         , posColumnNum :: Int
+data Position = Position { posCharNum   :: !Int
+                         , posLineNum   :: !Int
+                         , posColumnNum :: !Int
                          }
               deriving (Eq, Ord, Show)
 
