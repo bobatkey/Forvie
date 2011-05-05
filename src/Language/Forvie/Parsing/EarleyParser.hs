@@ -28,16 +28,27 @@ class (Functor m, Monad m) => ParseSourceMonad tok m where
 --------------------------------------------------------------------------------
 data Item rhs nt tok (f :: (* -> *) -> * -> *) v t where
     Item :: rhs nt tok v () (f v b)
-         -> RetAddr nt t b
+         -> RetAddr rhs nt tok f v t b
          -> Item rhs nt tok f v t
 
-data RetAddr nt t b where
-    NT       :: Int -> Call nt b -> RetAddr nt t b
-    TopLevel :: RetAddr nt t t
+data PreItem rhs nt tok (f :: (* -> *) -> * -> *) v t a where
+    PreItem :: rhs nt tok v (v a) (f v b)
+            -> RetAddr rhs nt tok f v t b
+            -> PreItem rhs nt tok f v t a
+               
 
-instance Show3 nt => Show2 (RetAddr nt t) where
-    show2 (NT i call) = "(NT " ++ show i ++ " " ++ show2 call ++ ")"
+data RetAddr rhs nt tok f v t b where
+    Local    :: Call nt b -> RetAddr rhs nt tok f v t b
+    TopLevel :: RetAddr rhs nt tok f v t t
+    Previous :: Int -> Call nt b -> [PreItem rhs nt tok f v t b] -> RetAddr rhs nt tok f v t b
+
+mkItem :: RHS rhs => v b -> PreItem rhs nt tok f v t b -> Item rhs nt tok f v t
+mkItem v (PreItem rhs ra) = Item (rhs $$ v) ra
+
+instance Show3 nt => Show2 (RetAddr rhs nt tok f v t) where
+    show2 (Previous i call _) = "(Previous " ++ show i ++ " " ++ show2 call ++ ")"
     show2 TopLevel    = "TopLevel"
+    show2 (Local call) = "(Local " ++ show2 call ++ ")"
 
 --------------------------------------------------------------------------------
 parse :: (Eq3 nt,
@@ -52,18 +63,18 @@ parse :: (Eq3 nt,
       -> nt a t
       -> a
       -> m [f v t]
-parse grammar r a = expander IM.empty 0 [Item rhs TopLevel]
+parse grammar r a = expander 0 [Item rhs TopLevel]
     where
       rhs = getRHS grammar (Call r a)
 
-      expander previous i ps = do
-        (wfc, wft, c) <- expand grammar previous i ps
+      expander i ps = do
+        (wft, c) <- expand grammar i ps
         t <- getInput
-        consumer (IM.insert i wfc previous) (i+1) wft c t
+        consumer (i+1) wft c t
 
-      consumer previous i wft c Nothing  = return c
-      consumer previous i wft _ (Just t) =
-          expander previous i (advance t wft)
+      consumer i wft c Nothing  = return c
+      consumer i wft _ (Just t) =
+          expander i (advance t wft)
 
 parseList :: (Eq3 nt,
               Show3 nt,
@@ -79,31 +90,50 @@ parseList :: (Eq3 nt,
           -> a
           -> [Lexeme tok]
           -> m [f v t]
-parseList grammar r a = expander IM.empty 0 [Item rhs TopLevel]
+parseList grammar r a = expander 0 [Item rhs TopLevel]
     where
       rhs = getRHS grammar (Call r a)
 
-      expander previous i ps input = do
-        (wfc, wft, c) <- expand grammar previous i ps
-        consumer (IM.insert i wfc previous) (i+1) wft c input
+      expander i ps input = do
+        (wft, c) <- expand grammar i ps
+        consumer (i+1) wft c input
 
-      consumer previous i wft c []  = return c
-      consumer previous i wft _ (t:ts) =
-          {-trace ("\nAdvancing on " ++ show (lexemeText t)) $-} expander previous i (advance t wft) ts
+      consumer i wft c []  = return c
+      consumer i wft _ (t:ts) =
+          {-trace ("\nAdvancing on " ++ show (lexemeText t)) $-} expander i (advance t wft) ts
 
 --------------------------------------------------------------------------------
 -- 't' for toplevel (and 'v' for variable)
 data WaitingForToken rhs nt tok f v t where
     WfTokenRA :: tok ->
                  rhs nt tok v Text (f v b) ->
-                 RetAddr nt t b ->
+                 RetAddr rhs nt tok f v t b ->
                  WaitingForToken rhs nt tok f v t
+
+doWFT :: Eq3 nt => Int -> [WaitingForCall rhs nt tok f v t] -> [WaitingForToken rhs nt tok f v t] -> [WaitingForToken rhs nt tok f v t]
+doWFT j mapping [] = []
+doWFT j mapping (WfTokenRA tok rhs (Local call) : wfts) = WfTokenRA tok rhs (Previous j call (findCalls call mapping)) : doWFT j mapping wfts
+doWFT j mapping (WfTokenRA tok rhs ra : wfts)           = WfTokenRA tok rhs ra : doWFT j mapping wfts
 
 data WaitingForCall rhs nt tok f v t where
     WfCallRA :: Call nt a ->
                 rhs nt tok v (v a) (f v b) ->
-                RetAddr nt t b ->
+                RetAddr rhs nt tok f v t b ->
                 WaitingForCall rhs nt tok f v t
+
+findCalls :: Eq3 nt => Call nt a -> [WaitingForCall rhs nt tok f v t] -> [PreItem rhs nt tok f v t a]
+findCalls call [] = []
+findCalls call (WfCallRA call' rhs ra : wfcalls) =
+    case call === call' of
+      Just Refl -> PreItem rhs ra : findCalls call wfcalls
+      Nothing   -> findCalls call wfcalls
+
+processCalls :: Eq3 nt => Int -> [WaitingForCall rhs nt tok f v t] -> [WaitingForCall rhs nt tok f v t] -> [WaitingForCall rhs nt tok f v t]
+processCalls j mapping [] = []
+processCalls j mapping (WfCallRA call rhs (Local call') : wfcalls)
+    = WfCallRA call rhs (Previous j call' (findCalls call' mapping)) : processCalls j mapping wfcalls
+processCalls j mapping (WfCallRA call rhs ra : wfcalls)
+    = WfCallRA call rhs ra : processCalls j mapping wfcalls
 
 data SomeCall nt where
     SomeCall :: Call nt a -> SomeCall nt
@@ -134,12 +164,8 @@ initState = St { parsed          = IM.empty
                , completeParse   = []
                }
 
-type Previous rhs nt tok f v t = IM.IntMap [WaitingForCall rhs nt tok f v t]
-
 type M rhs nt tok f v t m a =
-    ReaderT (Previous rhs nt tok f v t)
-            (StateT (St rhs nt tok f v t) m)
-            a
+    StateT (St rhs nt tok f v t) m a
 
 checkKnown :: forall rhs nt tok f v b t m.
               (Eq3 nt, Monad m, Functor m) =>
@@ -165,7 +191,7 @@ addKnown i call b =
 addWaitingForChar :: Monad m =>
                      tok
                   -> rhs nt tok v Text (f v b)
-                  -> RetAddr nt t b
+                  -> RetAddr rhs nt tok f v t b
                   -> M rhs nt tok f v t m ()
 addWaitingForChar cs p retAddr =
     modify $ \s -> s { waitingForToken = WfTokenRA cs p retAddr : waitingForToken s }
@@ -174,7 +200,6 @@ recordCalled :: (Eq3 nt, Monad m, Functor m) =>
                 Call nt a
              -> M rhs nt tok f v t m Bool
 recordCalled call = do
-  --trace ("recordCalled") $ return ()
   p <- elem (SomeCall call) <$> gets called
   unless p $ modify $ \s -> s { called = SomeCall call : called s }
   return p
@@ -182,7 +207,7 @@ recordCalled call = do
 addWaitingForCall :: Monad m => 
                      Call nt a ->
                      rhs nt tok v (v a) (f v b) ->
-                     RetAddr nt t b ->
+                     RetAddr rhs nt tok f v t b ->
                      M rhs nt tok f v t m ()
 addWaitingForCall call cont retAddr = do
   modify $ \s -> s { waitingForCall = WfCallRA call cont retAddr : waitingForCall s }
@@ -190,20 +215,6 @@ addWaitingForCall call cont retAddr = do
 -- FIXME: Need to ignore the waiting processes in the current item set
 -- that arise from inside stars. See the changes made to EarleyRecogniser.lhs
 -- Port the generation of items back to EarleyRecogniser.lhs
-getCompletions :: forall rhs nt tok f v t a m.
-                  (Eq3 nt, RHS rhs, Monad m, Functor m) =>
-                  Int
-               -> Int
-               -> Call nt a
-               -> v a
-               -> M rhs nt tok f v t m [Item rhs nt tok f v t]
-getCompletions i j call a
-    | i == j    = mapMaybe extract <$> gets waitingForCall
-    | otherwise = mapMaybe extract . fromMaybe [] . IM.lookup i <$> ask
-    where
-      extract :: WaitingForCall rhs nt tok f v t -> Maybe (Item rhs nt tok f v t)
-      extract (WfCallRA call' k ra) = do Refl <- call === call'
-                                         return (Item (k $$ a) ra)
 
 addComplete :: Monad m => f v t -> M rhs nt tok f v t m ()
 addComplete t = modify $ \s -> s { completeParse = t : completeParse s }
@@ -212,19 +223,15 @@ addComplete t = modify $ \s -> s { completeParse = t : completeParse s }
 expand :: forall rhs nt tok f v t m.
           (RHS rhs, Eq3 nt, ParseResultsMonad f v m) =>
           Grammar rhs f nt tok
-       -> Previous rhs nt tok f v t
        -> Int
        -> [Item rhs nt tok f v t]
-       -> m ( [WaitingForCall rhs nt tok f v t]
-            , [WaitingForToken rhs nt tok f v t]
+       -> m ( [WaitingForToken rhs nt tok f v t]
             , [f v t])
-expand grammar previous j worklist = do
-  St _ _ wfc wft complete <-
-     execStateT (runReaderT (process worklist)
-                            previous)
-                initState
-  --trace ("(j, length wfc, length wft) = " ++ show (j, length wfc, M.size wft)) $ return ()
-  return (wfc, wft, complete)
+expand grammar j worklist = do
+  St _ _ wfc wft complete <- execStateT (process worklist) initState
+  let mapping = processCalls j mapping wfc
+      wft'    = doWFT j mapping wft
+  return (wft', complete)
     where
       process :: [Item rhs nt tok f v t] -> M rhs nt tok f v t m ()
       process [] = return ()
@@ -232,7 +239,8 @@ expand grammar previous j worklist = do
         new <- concat <$> mapM (processC retAddr) (components p)
         process (new ++ worklist)
 
-      processC :: RetAddr nt t b
+      processC :: forall b.
+                  RetAddr rhs nt tok f v t b
                -> Component nt tok rhs v (f v b)
                -> M rhs nt tok f v t m [Item rhs nt tok f v t]
       processC retAddr (WfToken cs p) = do
@@ -243,23 +251,29 @@ expand grammar previous j worklist = do
         addComplete t
         return []
 
-      processC (NT i call) (Accept t) = do
+      processC (Local call) (Accept t) =
+          do known <- checkKnown j call
+             case known of
+               Nothing -> do v <- lift $ newResult j j t
+                             addKnown j call v
+                             map (mkItem v) . findCalls call <$> gets waitingForCall
+               Just v  -> do lift $ addResult v t
+                             return []
+
+      processC (Previous i call l) (Accept t) = do
         known <- checkKnown i call
         case known of
-          Nothing -> do v <- lift $ lift (newResult i j t)
+          Nothing -> do v <- lift $ newResult i j t
                         addKnown i call v
-                        l <- getCompletions i j call v
-                        --trace ("Completing " ++ show (i,j) ++ " " ++ show2 call ++ " => " ++ show (length l)) $ return ()
-                        return l
-          Just v  -> do lift $ lift (addResult v t)
+                        return $ map (mkItem v) l
+          Just v  -> do lift $ addResult v t
                         return []
 
       processC retAddr (WfCall insideStar call p) = do
         addWaitingForCall call p retAddr
         called <- recordCalled call
         let calls = if called then []
-                    else [Item (grammar `getRHS` call)
-                               (NT j call)]
+                    else [Item (grammar `getRHS` call) (Local call)]
         completion <-
             if not insideStar then
                 do known <- checkKnown j call
