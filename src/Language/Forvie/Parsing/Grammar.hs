@@ -3,6 +3,7 @@
 module Language.Forvie.Parsing.Grammar where
 
 import Data.Text (Text)
+import Data.Type.Equality
 import Data.Type.Eq
 import Data.Type.Show
 
@@ -13,7 +14,10 @@ instance Show3 nt => Show2 (Call nt) where
     show2 (Call nt a) = "(Call " ++ show3 nt ++ " " ++ show a ++ ")"
 
 instance Eq3 nt => Eq2 (Call nt) where
-    Call nt1 a1 === Call nt2 a2 = compareHelper (nt1 ==== nt2) a1 a2
+    Call nt1 a1 === Call nt2 a2 = 
+        case nt1 ==== nt2 of
+          Just (Refl,Refl) -> if a1 == a2 then Just Refl else Nothing
+          Nothing          -> Nothing
 
 data Component nt tok rhs v a where
     Accept  :: a ->
