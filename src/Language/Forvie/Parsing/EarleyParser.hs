@@ -1,10 +1,10 @@
-{-# LANGUAGE KindSignatures, GADTs, MultiParamTypeClasses, RankNTypes, ScopedTypeVariables #-}
+{-# LANGUAGE KindSignatures, GADTs, MultiParamTypeClasses, RankNTypes, ScopedTypeVariables, TypeOperators #-}
 
 module Language.Forvie.Parsing.EarleyParser where
 
 import Control.Applicative
 import qualified Data.IntMap as IM
-import Data.Maybe (fromMaybe, mapMaybe)
+import Data.Maybe (fromMaybe, mapMaybe, catMaybes)
 import Data.Text (Text)
 import Data.Type.Eq
 import Data.Type.Equality
@@ -12,7 +12,7 @@ import Data.Type.Show
 import Control.Monad.State
 import Control.Monad.Reader
 
---import Debug.Trace
+import Debug.Trace
 
 import Language.Forvie.Parsing.Grammar
 import Text.Lexeme
@@ -65,7 +65,7 @@ parse :: (Eq3 nt,
       -> m [f v t]
 parse grammar r a = expander 0 [Item rhs TopLevel]
     where
-      rhs = getRHS grammar (Call r a)
+      rhs = getRHS grammar (Call r a 0)
 
       expander i ps = do
         (wft, c) <- expand grammar i ps
@@ -92,7 +92,7 @@ parseList :: (Eq3 nt,
           -> m [f v t]
 parseList grammar r a = expander 0 [Item rhs TopLevel]
     where
-      rhs = getRHS grammar (Call r a)
+      rhs = getRHS grammar (Call r a 0)
 
       expander i ps input = do
         (wft, c) <- expand grammar i ps
@@ -121,10 +121,16 @@ data WaitingForCall rhs nt tok f v t where
                 RetAddr rhs nt tok f v t b ->
                 WaitingForCall rhs nt tok f v t
 
+relevantCall :: Eq3 nt => Call nt a -> Call nt b -> Maybe (a :=: b)
+relevantCall (Call nt1 a1 l1) (Call nt2 a2 l2) =
+    case nt1 ==== nt2 of
+      Just (Refl,Refl) -> if a1 == a2 && l1 <= l2 then Just Refl else Nothing
+      Nothing          -> Nothing
+
 findCalls :: Eq3 nt => Call nt a -> [WaitingForCall rhs nt tok f v t] -> [PreItem rhs nt tok f v t a]
 findCalls call [] = []
 findCalls call (WfCallRA call' rhs ra : wfcalls) =
-    case call === call' of
+    case call `relevantCall` call' of
       Just Refl -> PreItem rhs ra : findCalls call wfcalls
       Nothing   -> findCalls call wfcalls
 
@@ -167,6 +173,7 @@ initState = St { parsed          = IM.empty
 type M rhs nt tok f v t m a =
     StateT (St rhs nt tok f v t) m a
 
+-- FIXME: should this really check for relevant calls? I think so.
 checkKnown :: forall rhs nt tok f v b t m.
               (Eq3 nt, Monad m, Functor m) =>
               Int
@@ -220,8 +227,13 @@ addComplete :: Monad m => f v t -> M rhs nt tok f v t m ()
 addComplete t = modify $ \s -> s { completeParse = t : completeParse s }
 
 --------------------------------------------------------------------------------
+callsBelow :: Call nt a -> [Call nt a]
+callsBelow (Call nt x 0) = [Call nt x 0]
+callsBelow (Call nt x l) = Call nt x l : callsBelow (Call nt x (l-1))
+
+--------------------------------------------------------------------------------
 expand :: forall rhs nt tok f v t m.
-          (RHS rhs, Eq3 nt, ParseResultsMonad f v m) =>
+          (RHS rhs, Eq3 nt, Show3 nt, ParseResultsMonad f v m) =>
           Grammar rhs f nt tok
        -> Int
        -> [Item rhs nt tok f v t]
@@ -231,6 +243,7 @@ expand grammar j worklist = do
   St _ _ wfc wft complete <- execStateT (process worklist) initState
   let mapping = processCalls j mapping wfc
       wft'    = doWFT j mapping wft
+  --trace ("advance with " ++ show (length wft') ++ "\n") $
   return (wft', complete)
     where
       process :: [Item rhs nt tok f v t] -> M rhs nt tok f v t m ()
@@ -265,25 +278,25 @@ expand grammar j worklist = do
         case known of
           Nothing -> do v <- lift $ newResult i j t
                         addKnown i call v
+                        --trace ("Completing " ++ show (length l) ++ " for " ++ show2 call) $
                         return $ map (mkItem v) l
           Just v  -> do lift $ addResult v t
                         return []
 
       processC retAddr (WfCall insideStar call p) = do
         addWaitingForCall call p retAddr
-        called <- recordCalled call
-        let calls = if called then []
-                    else [Item (grammar `getRHS` call) (Local call)]
-        completion <-
-            if not insideStar then
-                do known <- checkKnown j call
-                   case known of
-                     Nothing -> return []
-                     Just v  -> return [Item (p $$ v)
-                                             retAddr]
-            else
-                return []
-        return (calls ++ completion)
+        concat <$> (forM (callsBelow call) $ \call ->
+                        do called <- recordCalled call
+                           calls  <- return $ if called then [] else [Item (grammar `getRHS` call) (Local call)]
+                           completion <-
+                               if not insideStar then
+                                   do known <- checkKnown j call
+                                      case known of
+                                        Nothing -> return []
+                                        Just v  -> return [Item (p $$ v) retAddr]
+                               else
+                                   return []
+                           return (calls ++ completion))
 
 --------------------------------------------------------------------------------
 advance :: (Eq tok, RHS rhs) =>
