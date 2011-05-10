@@ -41,9 +41,15 @@ instance Show3 NT where
     show3 Cons  = "Cons"
 
 --------------------------------------------------------------------------------
+decls :: [v Declaration] -> RHS NT T.Token v (AST v File)
+decls d = RHS [ Accept (File (reverse d))
+              , WfCall False (Call Decl () 0) $ \v ->
+                  RHS [ WfToken T.Semicolon $ \_ -> decls (v:d) ]
+              ]
+
 grammar :: Grammar AST NT T.Token
-grammar Decls = noPrec
-                (File <$> list (call Decl <* terminal T.Semicolon))
+grammar Decls = \_ _ -> decls []
+--                (File <$> list (call Decl <* terminal T.Semicolon))
 
 grammar Decl = noPrec
      (Assumption <$  terminal T.Assume <*> call Iden <* terminal T.Colon <*> (callTop Term)
