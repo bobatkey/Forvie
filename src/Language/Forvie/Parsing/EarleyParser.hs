@@ -12,7 +12,7 @@ import Data.Type.Show
 import Control.Monad.State
 import Control.Monad.Reader
 
-import Debug.Trace
+--import Debug.Trace
 
 import Language.Forvie.Parsing.Grammar
 import Text.Lexeme
@@ -193,12 +193,12 @@ addKnown :: Monad m =>
 addKnown i call b =
     modify $ \s -> s { parsed = IM.alter (Just . (Result call b:) . fromMaybe []) i (parsed s) }
 
-addWaitingForChar :: Monad m =>
+addWaitingForToken :: Monad m =>
                      tok
                   -> (Text -> RHS nt tok v (f v b))
                   -> RetAddr nt tok f v t b
                   -> M nt tok f v t m ()
-addWaitingForChar cs p retAddr =
+addWaitingForToken cs p retAddr =
     modify $ \s -> s { waitingForToken = WfTokenRA cs p retAddr : waitingForToken s }
 
 recordCalled :: (Eq3 nt, Monad m, Functor m) =>
@@ -250,7 +250,7 @@ expand grammar j worklist = do
                -> Component nt tok v (f v b)
                -> M nt tok f v t m [Item nt tok f v t]
       processC retAddr (WfToken cs p) = do
-        addWaitingForChar cs p retAddr
+        addWaitingForToken cs p retAddr
         return []
 
       processC TopLevel    (Accept t) = do
