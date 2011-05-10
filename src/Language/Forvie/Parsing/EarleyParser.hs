@@ -227,11 +227,6 @@ addComplete :: Monad m => f v t -> M rhs nt tok f v t m ()
 addComplete t = modify $ \s -> s { completeParse = t : completeParse s }
 
 --------------------------------------------------------------------------------
-callsBelow :: Call nt a -> [Call nt a]
-callsBelow (Call nt x 0) = [Call nt x 0]
-callsBelow (Call nt x l) = Call nt x l : callsBelow (Call nt x (l-1))
-
---------------------------------------------------------------------------------
 expand :: forall rhs nt tok f v t m.
           (RHS rhs, Eq3 nt, Show3 nt, ParseResultsMonad f v m) =>
           Grammar rhs f nt tok
@@ -285,10 +280,11 @@ expand grammar j worklist = do
 
       processC retAddr (WfCall insideStar call p) = do
         addWaitingForCall call p retAddr
-        concat <$> (forM (callsBelow call) $ \call ->
-                        do called <- recordCalled call
-                           calls  <- return $ if called then [] else [Item (grammar `getRHS` call) (Local call)]
-                           completion <-
+        let loop call@(Call nt x l) newitems =
+                do called <- recordCalled call
+                   if called then return newitems
+                    else do calls <- return [Item (grammar `getRHS` call) (Local call)]
+                            completion <-
                                if not insideStar then
                                    do known <- checkKnown j call
                                       case known of
@@ -296,7 +292,9 @@ expand grammar j worklist = do
                                         Just v  -> return [Item (p $$ v) retAddr]
                                else
                                    return []
-                           return (calls ++ completion))
+                            let newitems' = calls ++ completion ++ newitems
+                            if l == 0 then return newitems' else loop (Call nt x (l-1)) newitems'
+        loop call []
 
 --------------------------------------------------------------------------------
 advance :: (Eq tok, RHS rhs) =>
