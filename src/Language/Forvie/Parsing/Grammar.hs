@@ -5,13 +5,14 @@ module Language.Forvie.Parsing.Grammar where
 import Control.Monad (ap)
 import Control.Applicative
 
+import Data.Hashable
 import Data.Text (Text)
 import Data.Type.Equality
 import Data.Type.Eq
 import Data.Type.Show
 
 data Call nt b where
-    Call :: (Eq a, Show a) => nt a b -> a -> Int -> Call nt b
+    Call :: (Ord a, Show a, Hashable a) => nt a b -> a -> Int -> Call nt b
 
 instance Show3 nt => Show2 (Call nt) where
     show2 (Call nt a l) = "(Call " ++ show3 nt ++ " " ++ show a ++ " " ++ show l ++ ")"

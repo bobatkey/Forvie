@@ -68,7 +68,9 @@ Library
                         Data.Regexp,
                         Data.SExpr,
                         Data.Type.Eq,
+                        Data.Type.Ord,
                         Data.Type.Show,
+                        Data.Type.Hashable,
                         Control.StreamProcessor,
                         Control.StreamProcessor.ByteString,
                         Control.StreamProcessor.UTF8,
@@ -86,7 +88,9 @@ Library
                         bytestring >= 0.9.1.5,
                         pretty >= 1.0.1.1,
                         blaze-html >= 0.3.2.0,
-                        type-equality >= 0.1.0
+                        type-equality >= 0.1.0,
+                        hashable >= 1.1.1.0,
+                        hashmap >= 1.2.0.0
   
   -- Modules not exported by this package.
   Other-modules:        Control.StreamProcessor.Rewindable,

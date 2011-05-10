@@ -11,6 +11,8 @@ import Control.Applicative
 import Data.Type.Equality
 import Data.Type.Eq
 import Data.Type.Show
+import Data.Type.Ord
+import Data.Type.Hashable
 
 import Language.Forvie.Parsing.Grammar
 
@@ -32,6 +34,18 @@ instance Eq3 NT where
     Iden  ==== Iden  = Just (Refl, Refl)
     Cons  ==== Cons  = Just (Refl, Refl)
     _     ==== _     = Nothing
+
+instance Hashable3 NT where
+    hash3 Decls = 0
+    hash3 Decl  = 1
+    hash3 Term  = 2
+    hash3 Iden  = 3
+    hash3 Cons  = 4
+
+    hashWithSalt3 s x = s * hash3 x -- FIXME
+
+instance Ord3 NT where
+    compare3 x y = compare (hash3 x) (hash3 y)
 
 instance Show3 NT where
     show3 Decls = "Decls"

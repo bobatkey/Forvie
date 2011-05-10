@@ -5,10 +5,14 @@ module Language.Forvie.Parsing.EarleyParser where
 import Control.Applicative
 import qualified Data.IntMap as IM
 import Data.Maybe (fromMaybe, mapMaybe, catMaybes)
+import Data.Hashable
 import Data.Text (Text)
 import Data.Type.Eq
+import Data.Type.Ord
 import Data.Type.Equality
 import Data.Type.Show
+import Data.Type.Hashable
+import qualified Data.HashSet as HS
 import Control.Monad.State
 import Control.Monad.Reader
 
@@ -51,11 +55,12 @@ instance Show3 nt => Show2 (RetAddr nt tok f v t) where
     show2 (Local call) = "(Local " ++ show2 call ++ ")"
 
 --------------------------------------------------------------------------------
-parse :: (Eq3 nt,
+parse :: (Ord3 nt, Hashable3 nt,
           Show3 nt,
           Eq  tok,
-          Eq  a,
+          Ord  a,
           Show a,
+          Hashable a,
           ParseResultsMonad f v m,
           ParseSourceMonad tok m) =>
          Grammar f nt tok
@@ -75,12 +80,13 @@ parse grammar r a = expander 0 [Item rhs TopLevel]
       consumer i wft _ (Just t) =
           expander i (advance t wft)
 
-parseList :: (Eq3 nt,
+parseList :: (Ord3 nt, Hashable3 nt,
               Show3 nt,
               Eq  tok,
               Show tok,
-              Eq  a,
+              Ord  a,
               Show a,
+              Hashable a,
               ParseResultsMonad f v m,
               Ord tok) =>
              Grammar f nt tok
@@ -147,6 +153,16 @@ instance Eq3 nt => Eq (SomeCall nt) where
                                   Nothing -> False
                                   Just _  -> True
 
+instance Hashable3 nt => Hashable (SomeCall nt) where
+    hash (SomeCall (Call nt a l)) = hash3 nt `combine` hash a `combine` hash l
+    hashWithSalt = undefined -- FIXME
+
+instance (Eq3 nt, Ord3 nt) => Ord (SomeCall nt) where
+    compare (SomeCall (Call nt1 a1 l1)) (SomeCall (Call nt2 a2 l2))
+        = case nt1 ==== nt2 of
+            Just (Refl, Refl) -> compare (a1,l1) (a2,l2)
+            Nothing           -> compare3 nt1 nt2
+
 --------------------------------------------------------------------------------
 data Result v nt where
     Result :: Call nt a -> v a -> Result v nt
@@ -154,7 +170,7 @@ data Result v nt where
 --------------------------------------------------------------------------------
 data St nt tok f v t
     = St { parsed          :: IM.IntMap [Result v nt]       -- start point, nonterminal recognised
-         , called          :: [SomeCall nt]                 -- non-terminals we have predicted at this point
+         , called          :: HS.Set (SomeCall nt)                 -- non-terminals we have predicted at this point
          , waitingForCall  :: [WaitingForCall nt tok f v t] -- processes that are waiting for the completion of a non-terminal
          , waitingForToken :: [WaitingForToken nt tok f v t] -- processes that are waiting for a token
          , completeParse   :: [f v t]                       -- whether a complete parse of the input has been discovered here
@@ -162,7 +178,7 @@ data St nt tok f v t
 
 initState :: St nt tok f v t
 initState = St { parsed          = IM.empty
-               , called          = []
+               , called          = HS.empty
                , waitingForCall  = []
                , waitingForToken = []
                , completeParse   = []
@@ -201,12 +217,12 @@ addWaitingForToken :: Monad m =>
 addWaitingForToken cs p retAddr =
     modify $ \s -> s { waitingForToken = WfTokenRA cs p retAddr : waitingForToken s }
 
-recordCalled :: (Eq3 nt, Monad m, Functor m) =>
+recordCalled :: (Hashable3 nt, Ord3 nt, Monad m, Functor m) =>
                 Call nt a
              -> M nt tok f v t m Bool
 recordCalled call = do
-  p <- elem (SomeCall call) <$> gets called
-  unless p $ modify $ \s -> s { called = SomeCall call : called s }
+  p <- HS.member (SomeCall call) <$> gets called
+  unless p $ modify $ \s -> s { called = HS.insert (SomeCall call) (called s) }
   return p
 
 addWaitingForCall :: Monad m => 
@@ -226,7 +242,7 @@ addComplete t = modify $ \s -> s { completeParse = t : completeParse s }
 
 --------------------------------------------------------------------------------
 expand :: forall nt tok f v t m.
-          (Eq3 nt, Show3 nt, ParseResultsMonad f v m) =>
+          (Ord3 nt, Hashable3 nt, Show3 nt, ParseResultsMonad f v m) =>
           Grammar f nt tok
        -> Int
        -> [Item nt tok f v t]
