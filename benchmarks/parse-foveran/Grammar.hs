@@ -23,7 +23,7 @@ import Display
 data NT a b where
     Decls :: NT ()        File
     Decl  :: NT ()        Declaration
-    Term  :: NT PrecLevel Term
+    Term  :: NT ()        Term
     Iden  :: NT ()        Ident
     Cons  :: NT ()        Constructor
 
@@ -44,74 +44,98 @@ instance Show3 NT where
 
 --------------------------------------------------------------------------------
 grammar :: Grammar P AST NT T.Token
-grammar Decls =
-      File <$> list (nt Decl <* terminal T.Semicolon)
+grammar Decls = noPrec
+                (File <$> list (nt Decl <* terminal T.Semicolon))
 
-grammar Decl =
-      Assumption <$  terminal T.Assume <*> nt Iden <* terminal T.Colon <*> setLevel 10 (nt Term)
-  <|> TypeDecl   <$> nt Iden <* terminal T.Colon <*> setLevel 10 (nt Term)
-  <|> Definition <$> nt Iden <*> list (nt Iden) <* terminal T.Equals <*> setLevel 10 (nt Term)
+grammar Decl = noPrec
+     (Assumption <$  terminal T.Assume <*> nt Iden <* terminal T.Colon <*> reset (nt' Term)
+  <|> TypeDecl   <$> nt Iden <* terminal T.Colon <*> reset (nt' Term)
+  <|> Definition <$> nt Iden <*> list (nt Iden) <* terminal T.Equals <*> reset (nt' Term)
   <|> Datatype   <$  terminal T.Data
                  <*> nt Iden
-                 <*> list ((,) <$ terminal T.LParen <*> nt Iden <* terminal T.Colon <*> setLevel 10 (nt Term) <* terminal T.RParen)
-                 <*  terminal T.Colon <* terminal T.Set <* terminal T.ColonEquals <*> list (nt Cons)
+                 <*> list ((,) <$ terminal T.LParen <*> nt Iden <* terminal T.Colon <*> reset (nt' Term) <* terminal T.RParen)
+                 <*  terminal T.Colon <* terminal T.Set <* terminal T.ColonEquals <*> list (nt Cons))
 
-grammar Cons =
-      Constr <$ terminal T.Pipe <*> nt Iden <* terminal T.Colon <*> list (setLevel 0 (nt Term))
+grammar Cons = noPrec
+      (Constr <$ terminal T.Pipe <*> nt Iden <* terminal T.Colon <*> list (setLevel 0 (nt' Term)))
 
-grammar Iden =
-      Identifier <$> terminal T.Ident
+grammar Iden = noPrec
+      (Identifier <$> terminal T.Ident)
+
+-- Idea: when we have a call to 'Term (PL 9)', the predictor ought to
+-- spark off calls to everything below that (assuming they haven't
+-- been called already). Change atLevel to be strict.
+
+-- Idea is to simulate the effect of having a fallthrough case in the
+-- grammar, but without marking the return values. So:
+
+-- - When calling 'Term (PL 9)' the expander:
+--   - calls 'Term (PL 9)' as normal
+--   - generates a call to 'Term (PL 8)'
+
+--   - generates a special item that awaits the response from the call
+--     to 'Term (PL 8)', upon completion of this item with a variable
+--     of type 'v Term', the variable is passed straight up to the
+--     caller of 'Term (PL 9)'
+
+-- normally, when the call to 'Term (PL 8)' completes, it will return
+-- back up to callers of 'Term (PL 8)'. Want it to return to callers
+-- of any precedence level above '8' (up to ten). Could do this by
+-- fiddling the 'findCalls' function.
+
+-- When doing a completion, we should let 'Term (PL 4)' complete
+-- something that requires 'Term (PL 5)'.
 
 grammar Term =
-      atLevel 0  (Var <$> nt' Iden)
-  <|> atLevel 0  (Paren <$ terminal T.LParen <*> reset (nt Term) <* terminal T.RParen)
-  <|> atLevel 10 (Lam <$  terminal T.Lambda <*> nonEmptyList (nt' Iden) <* terminal T.FullStop <*> nt Term)
-  <|> atLevel 10 (Pi
+      atLevel 0  (Var <$> ntU Iden)
+  <|> atLevel 0  (Paren <$ terminal T.LParen <*> reset (nt' Term) <* terminal T.RParen)
+  <|> atLevel 4  (Lam <$  terminal T.Lambda <*> nonEmptyList (ntU Iden) <* terminal T.FullStop <*> nt' Term)
+  <|> atLevel 4  (Pi
                   <$  terminal T.LParen
-                  <*> nonEmptyList (nt' Iden)
+                  <*> nonEmptyList (ntU Iden)
                   <*  terminal T.Colon
-                  <*> nt Term
+                  <*> nt' Term
                   <*  terminal T.RParen
                   <*  terminal T.Arrow
-                  <*> nt Term)
-  <|> atLevel 10 (Sigma
+                  <*> nt' Term)
+  <|> atLevel 4  (Sigma
                   <$  terminal T.LParen
-                  <*> nonEmptyList (nt' Iden)
+                  <*> nonEmptyList (ntU Iden)
                   <*  terminal T.Colon
-                  <*> nt Term
+                  <*> nt' Term
                   <*  terminal T.RParen
                   <*  terminal T.Times
-                  <*> nt Term)
-  <|> atLevel 10 (Arr <$> down (nt Term) <*  terminal T.Arrow <*> nt Term)
-  <|> atLevel 9  (Sum <$> down (nt Term) <*  terminal T.Plus <*> nt Term)
-  <|> atLevel 9  (Desc_Sum <$> down (nt Term) <* terminal T.QuotePlus <*> nt Term)
-  <|> atLevel 8  (Prod <$> down (nt Term) <*  terminal T.Times <*> nt Term)
-  <|> atLevel 8  (Desc_Prod <$> down (nt Term) <*  terminal T.QuoteTimes <*> nt Term)
-  <|> atLevel 1  (Inl <$  terminal T.Inl <*> down (nt Term))
-  <|> atLevel 1  (Inr <$  terminal T.Inr <*> down (nt Term))
-  <|> atLevel 1  (Desc_K <$ terminal T.QuoteK <*> down (nt Term))
-  <|> atLevel 1  (Mu     <$ terminal T.Mu <*> down (nt Term))
-  <|> atLevel 1  (Construct <$ terminal T.Construct <*> down (nt Term))
-  <|> atLevel 1  (IDesc_Id  <$ terminal T.Quote_IId <*> down (nt Term))
-  <|> atLevel 1  (IDesc_Sg  <$ terminal T.Quote_Sg <*> down (nt Term) <*> down (nt Term))
-  <|> atLevel 1  (IDesc_Pi  <$ terminal T.Quote_Pi <*> down (nt Term) <*> down (nt Term))
-  <|> atLevel 1  (App <$> down (nt Term) <*> nonEmptyList (down (nt Term)))
+                  <*> nt' Term)
+  <|> atLevel 4  (Arr <$> down (nt' Term) <*  terminal T.Arrow <*> nt' Term)
+  <|> atLevel 3  (Sum <$> down (nt' Term) <*  terminal T.Plus <*> nt' Term)
+  <|> atLevel 3  (Desc_Sum <$> down (nt' Term) <* terminal T.QuotePlus <*> nt' Term)
+  <|> atLevel 2  (Prod <$> down (nt' Term) <*  terminal T.Times <*> nt' Term)
+  <|> atLevel 2  (Desc_Prod <$> down (nt' Term) <*  terminal T.QuoteTimes <*> nt' Term)
+  <|> atLevel 1  (Inl <$  terminal T.Inl <*> down (nt' Term))
+  <|> atLevel 1  (Inr <$  terminal T.Inr <*> down (nt' Term))
+  <|> atLevel 1  (Desc_K <$ terminal T.QuoteK <*> down (nt' Term))
+  <|> atLevel 1  (Mu     <$ terminal T.Mu <*> down (nt' Term))
+  <|> atLevel 1  (Construct <$ terminal T.Construct <*> down (nt' Term))
+  <|> atLevel 1  (IDesc_Id  <$ terminal T.Quote_IId <*> down (nt' Term))
+  <|> atLevel 1  (IDesc_Sg  <$ terminal T.Quote_Sg <*> down (nt' Term) <*> down (nt' Term))
+  <|> atLevel 1  (IDesc_Pi  <$ terminal T.Quote_Pi <*> down (nt' Term) <*> down (nt' Term))
+  <|> atLevel 1  (App <$> down (nt' Term) <*> nonEmptyList (down (nt' Term)))
  -- FIXME: should unary operators be a level 1 or level 0?
-  <|> atLevel 0  (Proj1 <$ terminal T.Fst <*> nt Term)
-  <|> atLevel 0  (Proj2 <$ terminal T.Snd <*> nt Term)
-  <|> atLevel 0  (MuI   <$ terminal T.MuI <*> nt Term <*> nt Term)
+  <|> atLevel 0  (Proj1 <$ terminal T.Fst <*> nt' Term)
+  <|> atLevel 0  (Proj2 <$ terminal T.Snd <*> nt' Term)
+  <|> atLevel 0  (MuI   <$ terminal T.MuI <*> nt' Term <*> nt' Term)
   <|> atLevel 0  (Induction <$ terminal T.Induction)
   <|> atLevel 0  (Desc_Elim <$ terminal T.ElimD)
   <|> atLevel 0  (UnitI     <$ terminal T.UnitValue)
-  <|> atLevel 0  (Pair  <$ terminal T.LDoubleAngle <*> reset (nt Term) <* terminal T.Comma <*> reset (nt Term) <* terminal T.RDoubleAngle)
+  <|> atLevel 0  (Pair  <$ terminal T.LDoubleAngle <*> reset (nt' Term) <* terminal T.Comma <*> reset (nt' Term) <* terminal T.RDoubleAngle)
   <|> atLevel 0  (Case
                   <$  terminal T.Case
-                  <*> reset (nt Term)
-                  <*  terminal T.For <*> nt' Iden <*  terminal T.FullStop <*> reset (nt Term) <*  terminal T.With
+                  <*> reset (nt' Term)
+                  <*  terminal T.For <*> ntU Iden <*  terminal T.FullStop <*> reset (nt' Term) <*  terminal T.With
                   <*  terminal T.LBrace
-                  <*  terminal T.Inl <*> nt' Iden <* terminal T.FullStop <*> reset (nt Term)
+                  <*  terminal T.Inl <*> ntU Iden <* terminal T.FullStop <*> reset (nt' Term)
                   <*  terminal T.Semicolon
-                  <*  terminal T.Inr <*> nt' Iden <* terminal T.FullStop <*> reset (nt Term)
+                  <*  terminal T.Inr <*> ntU Iden <* terminal T.FullStop <*> reset (nt' Term)
                   <*  terminal T.RBrace)
   <|> atLevel 0  (Set <$ terminal T.Set <*> (pure 0 <|> (read . T.unpack <$> terminal T.Number)))
   <|> atLevel 0  (Empty <$ terminal T.EmptyType)
