@@ -6,7 +6,6 @@ module Grammar
 
 import qualified Data.Text as T
 
-import Control.Arrow
 import Control.Applicative
 
 import Data.Type.Equality
@@ -14,7 +13,6 @@ import Data.Type.Eq
 import Data.Type.Show
 
 import Language.Forvie.Parsing.Grammar
-import Language.Forvie.Parsing.Monad
 
 import qualified Token as T
 import Display
@@ -43,21 +41,21 @@ instance Show3 NT where
     show3 Cons  = "Cons"
 
 --------------------------------------------------------------------------------
-grammar :: Grammar P AST NT T.Token
+grammar :: Grammar AST NT T.Token
 grammar Decls = noPrec
-                (File <$> list (nt Decl <* terminal T.Semicolon))
+                (File <$> list (call Decl <* terminal T.Semicolon))
 
 grammar Decl = noPrec
-     (Assumption <$  terminal T.Assume <*> nt Iden <* terminal T.Colon <*> reset (nt' Term)
-  <|> TypeDecl   <$> nt Iden <* terminal T.Colon <*> reset (nt' Term)
-  <|> Definition <$> nt Iden <*> list (nt Iden) <* terminal T.Equals <*> reset (nt' Term)
+     (Assumption <$  terminal T.Assume <*> call Iden <* terminal T.Colon <*> (callTop Term)
+  <|> TypeDecl   <$> call Iden <* terminal T.Colon <*> (callTop Term)
+  <|> Definition <$> call Iden <*> list (call Iden) <* terminal T.Equals <*> (callTop Term)
   <|> Datatype   <$  terminal T.Data
-                 <*> nt Iden
-                 <*> list ((,) <$ terminal T.LParen <*> nt Iden <* terminal T.Colon <*> reset (nt' Term) <* terminal T.RParen)
-                 <*  terminal T.Colon <* terminal T.Set <* terminal T.ColonEquals <*> list (nt Cons))
+                 <*> call Iden
+                 <*> list ((,) <$ terminal T.LParen <*> call Iden <* terminal T.Colon <*> (callTop Term) <* terminal T.RParen)
+                 <*  terminal T.Colon <* terminal T.Set <* terminal T.ColonEquals <*> list (call Cons))
 
 grammar Cons = noPrec
-      (Constr <$ terminal T.Pipe <*> nt Iden <* terminal T.Colon <*> list (setLevel 0 (nt' Term)))
+      (Constr <$ terminal T.Pipe <*> call Iden <* terminal T.Colon <*> list (callAt Term 0))
 
 grammar Iden = noPrec
       (Identifier <$> terminal T.Ident)
@@ -87,66 +85,77 @@ grammar Iden = noPrec
 -- something that requires 'Term (PL 5)'.
 
 grammar Term =
-      atLevel 4  
-          ((Lam <$  terminal T.Lambda <*> nonEmptyList (ntU Iden) <* terminal T.FullStop <*> nt' Term)
-           <|> (Pi
-                  <$  terminal T.LParen
-                  <*> nonEmptyList (ntU Iden)
-                  <*  terminal T.Colon
-                  <*> nt' Term
-                  <*  terminal T.RParen
-                  <*  terminal T.Arrow
-                  <*> nt' Term)
-           <|> (Sigma
-                  <$  terminal T.LParen
-                  <*> nonEmptyList (ntU Iden)
-                  <*  terminal T.Colon
-                  <*> nt' Term
-                  <*  terminal T.RParen
-                  <*  terminal T.Times
-                  <*> nt' Term)
-           <|> (Arr <$> down (nt' Term) <*  terminal T.Arrow <*> nt' Term))
-  <|> atLevel 3 
-          ((Sum <$> down (nt' Term) <*  terminal T.Plus <*> nt' Term)
-           <|> (Desc_Sum <$> down (nt' Term) <* terminal T.QuotePlus <*> nt' Term))
-  <|> atLevel 2  
-          ((Prod <$> down (nt' Term) <*  terminal T.Times <*> nt' Term)
-           <|> (Desc_Prod <$> down (nt' Term) <*  terminal T.QuoteTimes <*> nt' Term))
-  <|> atLevel 1
-          ((Inl <$  terminal T.Inl <*> down (nt' Term))
-           <|> (Inr <$  terminal T.Inr <*> down (nt' Term))
-           <|> (Desc_K <$ terminal T.QuoteK <*> down (nt' Term))
-           <|> (Mu     <$ terminal T.Mu <*> down (nt' Term))
-           <|> (Construct <$ terminal T.Construct <*> down (nt' Term))
-           <|> (IDesc_Id  <$ terminal T.Quote_IId <*> down (nt' Term))
-           <|> (IDesc_Sg  <$ terminal T.Quote_Sg <*> down (nt' Term) <*> down (nt' Term))
-           <|> (IDesc_Pi  <$ terminal T.Quote_Pi <*> down (nt' Term) <*> down (nt' Term))
-           <|> (App <$> down (nt' Term) <*> nonEmptyList (down (nt' Term))))
- -- FIXME: should unary operators be a level 1 or level 0?
-  <|> atLevel 0  
-          (Proj1 <$ terminal T.Fst <*> nt' Term
-           <|> (Proj2 <$ terminal T.Snd <*> nt' Term)
-           <|> (MuI   <$ terminal T.MuI <*> nt' Term <*> nt' Term)
-           <|> (Induction <$ terminal T.Induction)
-           <|> (Desc_Elim <$ terminal T.ElimD)
-           <|> (UnitI     <$ terminal T.UnitValue)
-           <|> (Pair  <$ terminal T.LDoubleAngle <*> reset (nt' Term) <* terminal T.Comma <*> reset (nt' Term) <* terminal T.RDoubleAngle)
-           <|> (Case
-                  <$  terminal T.Case
-                  <*> reset (nt' Term)
-                  <*  terminal T.For <*> ntU Iden <*  terminal T.FullStop <*> reset (nt' Term) <*  terminal T.With
-                  <*  terminal T.LBrace
-                  <*  terminal T.Inl <*> ntU Iden <* terminal T.FullStop <*> reset (nt' Term)
-                  <*  terminal T.Semicolon
-                  <*  terminal T.Inr <*> ntU Iden <* terminal T.FullStop <*> reset (nt' Term)
-                  <*  terminal T.RBrace)
-           <|> (Set <$ terminal T.Set <*> (pure 0 <|> (read . T.unpack <$> terminal T.Number)))
-           <|> (Empty <$ terminal T.EmptyType)
-           <|> (ElimEmpty <$ terminal T.ElimEmpty)
-           <|> (Unit <$ terminal T.UnitType)
-           <|> (Desc_Id <$ terminal T.QuoteId)
-           <|> (Desc <$ terminal T.Desc)
-           <|> (IDesc <$ terminal T.IDesc)
-           <|> (IDesc_Elim <$ terminal T.IDesc_Elim)
-           <|> (Var <$> ntU Iden)
-           <|> (Paren <$ terminal T.LParen <*> reset (nt' Term) <* terminal T.RParen))
+    \l () ->
+        case l of
+          4 -> term4
+          3 -> term3
+          2 -> term2
+          1 -> term1
+          0 -> term0
+
+term4 :: RHS NT T.Token v (AST v Term)
+term4 = ((Lam <$  terminal T.Lambda <*> nonEmptyList (call Iden) <* terminal T.FullStop <*> callAt Term 4)
+                <|> (Pi
+                     <$  terminal T.LParen
+                     <*> nonEmptyList (call Iden)
+                     <*  terminal T.Colon
+                     <*> callAt Term 4
+                     <*  terminal T.RParen
+                     <*  terminal T.Arrow
+                     <*> callAt Term 4)
+                <|> (Sigma
+                     <$  terminal T.LParen
+                     <*> nonEmptyList (call Iden)
+                     <*  terminal T.Colon
+                     <*> callAt Term 4
+                     <*  terminal T.RParen
+                     <*  terminal T.Times
+                     <*> callAt Term 4)
+                <|> (Arr <$> callAt Term 3 <*  terminal T.Arrow <*> callAt Term 4))
+
+term3 :: RHS NT T.Token v (AST v Term)
+term3 = ((Sum <$> callAt Term 2 <*  terminal T.Plus <*> callAt Term 3)
+                <|> (Desc_Sum <$> callAt Term 2 <* terminal T.QuotePlus <*> callAt Term 3))
+
+term2 :: RHS NT T.Token v (AST v Term)
+term2 = ((Prod <$> callAt Term 1 <*  terminal T.Times <*> callAt Term 2)
+                <|> (Desc_Prod <$> callAt Term 1 <*  terminal T.QuoteTimes <*> callAt Term 2))
+
+term1 :: RHS NT T.Token v (AST v Term)
+term1 = (Inl <$  terminal T.Inl <*> callAt Term 0)
+                <|> (Inr <$  terminal T.Inr <*> callAt Term 0)
+                <|> (Desc_K <$ terminal T.QuoteK <*> callAt Term 0)
+                <|> (Mu     <$ terminal T.Mu <*> callAt Term 0)
+                <|> (Construct <$ terminal T.Construct <*> callAt Term 0)
+                <|> (IDesc_Id  <$ terminal T.Quote_IId <*> callAt Term 0)
+                <|> (IDesc_Sg  <$ terminal T.Quote_Sg <*> callAt Term 0 <*> callAt Term 0)
+                <|> (IDesc_Pi  <$ terminal T.Quote_Pi <*> callAt Term 0 <*> callAt Term 0)
+                <|> (App <$> callAt Term 0 <*> nonEmptyList (callAt Term 0))
+
+term0 :: RHS NT T.Token v (AST v Term)
+term0 = (Proj1 <$ terminal T.Fst <*> callAt Term 0
+                <|> (Proj2 <$ terminal T.Snd <*> callAt Term 0)
+                <|> (MuI   <$ terminal T.MuI <*> callAt Term 0 <*> callAt Term 0)
+                <|> (Induction <$ terminal T.Induction)
+                <|> (Desc_Elim <$ terminal T.ElimD)
+                <|> (UnitI     <$ terminal T.UnitValue)
+                <|> (Pair  <$ terminal T.LDoubleAngle <*> (callTop Term) <* terminal T.Comma <*> (callTop Term) <* terminal T.RDoubleAngle)
+                <|> (Case
+                     <$  terminal T.Case
+                     <*> (callTop Term)
+                     <*  terminal T.For <*> call Iden <*  terminal T.FullStop <*> (callTop Term) <*  terminal T.With
+                     <*  terminal T.LBrace
+                     <*  terminal T.Inl <*> call Iden <* terminal T.FullStop <*> (callTop Term)
+                     <*  terminal T.Semicolon
+                     <*  terminal T.Inr <*> call Iden <* terminal T.FullStop <*> (callTop Term)
+                     <*  terminal T.RBrace)
+                <|> (Set <$ terminal T.Set <*> (pure 0 <|> (read . T.unpack <$> terminal T.Number)))
+                <|> (Empty <$ terminal T.EmptyType)
+                <|> (ElimEmpty <$ terminal T.ElimEmpty)
+                <|> (Unit <$ terminal T.UnitType)
+                <|> (Desc_Id <$ terminal T.QuoteId)
+                <|> (Desc <$ terminal T.Desc)
+                <|> (IDesc <$ terminal T.IDesc)
+                <|> (IDesc_Elim <$ terminal T.IDesc_Elim)
+                <|> (Var <$> call Iden)
+                <|> (Paren <$ terminal T.LParen <*> (callTop Term) <* terminal T.RParen))
