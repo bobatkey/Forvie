@@ -9,6 +9,7 @@ module Parsing
     , ppInputError
     , prettyKnot
     , readFoveranFile2
+    , lexFoveranFile
     )
     where
 
@@ -160,6 +161,9 @@ rejectAmbiguity (Success (x:y:_))       = AmbiguityDetected (Knot x) (Knot y)
 rejectAmbiguity (AmbiguityDetected x y) = AmbiguityDetected x y
 rejectAmbiguity ParseFailure            = ParseFailure
 
+lexFoveranFile :: FilePath -> IO (Either InputError [Lexeme Token])
+lexFoveranFile filename = do
+  onText (lexer' >>> exceptIgnorable >>| gather) <$> TIO.readFile filename
 
 readFoveranFile2 :: FilePath -> IO (Either InputError (Knot AST File))
 readFoveranFile2 filename = do
