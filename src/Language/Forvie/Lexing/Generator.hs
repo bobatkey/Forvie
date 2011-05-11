@@ -34,6 +34,9 @@
 module Language.Forvie.Lexing.Generator
     ( lexerSP 
     , lexerSPStatic
+    , lexText
+    , lexTextStatic
+    , lexStringStatic
     , LexingError (..)
     , exceptIgnorable
     , module Text.Lexeme
@@ -44,9 +47,11 @@ import           Control.Category ((>>>))
 import qualified Control.StreamProcessor as SP
 import           Control.StreamProcessor.Positions
 import           Control.StreamProcessor.Rewindable
-import           Text.Position (Position, Span (Span))
+import           Text.Position (Position, Span (Span), initPos)
 import qualified Data.DFA as DFA
 import qualified Data.Text as T
+import qualified Data.Text.Lazy as TL
+import           Data.Maybe (fromMaybe)
 import           Data.DFA.TH
 import           Language.Haskell.TH
 import           Language.Haskell.TH.Syntax
@@ -153,3 +158,82 @@ exceptIgnorable = SP.filterSP f
     where f (Lexeme (Emit t) p s)   = Just (Lexeme t p s)
           f (Lexeme (Ignore _) _ _) = Nothing
 
+lexText :: (Ord tok) =>
+           CompiledLexSpec tok ->
+           T.Text ->
+          [Lexeme tok]
+lexText l = go initState
+    where
+      dfa = lexSpecDFA l
+
+      initState = (0, Nothing) -- (DFA state, Pointer to start of current lexeme, Current match)
+
+      go (dfaState, matcher) txt =
+          case T.uncons txt of
+            Nothing ->
+                case matcher of
+                  Nothing                 -> []
+                  Just (ltxt, _, current) -> emit ltxt current Nothing
+            Just (c,rst) ->
+                let (ltxt, k, current) = fromMaybe (txt, 0, Nothing) matcher
+                in case DFA.transition dfa dfaState c of
+                     DFA.Accepting t newState -> go (newState, Just (ltxt, k+1, Just (k+1,t))) rst
+                     DFA.Error                -> emit ltxt current (Just c)
+                     DFA.Change newState      -> go (newState, Just (ltxt, k+1, current)) rst
+
+      emit ltxt Nothing      Nothing  = error $ "Lexing error at end of input"
+      emit ltxt Nothing      (Just c) = error $ "Lexing error on input " ++ show c
+      emit ltxt (Just (k,t)) _        = Lexeme t (Span initPos initPos) lexeme : go initState rest
+          where (lexeme, rest) = T.splitAt k ltxt
+
+lexTextStatic :: Lift tok => CompiledLexSpec tok -> ExpQ
+lexTextStatic spec =
+    [| let initState = (0, Nothing) -- (DFA state, Pointer to start of current lexeme, Current match)
+
+           go (dfaState, matcher) txt =
+               case TL.uncons txt of
+                 Nothing ->
+                     case matcher of
+                       Nothing                 -> []
+                       Just (ltxt, _, current) -> emit ltxt current Nothing
+                 Just (c,rst) ->
+                     let (ltxt, k, current) = fromMaybe (txt, 0, Nothing) matcher
+                     in case $(makeTransitionFunction dfa) dfaState c of
+                          DFA.Accepting t newState -> go (newState, Just (ltxt, k+1, Just (k+1,t))) rst
+                          DFA.Error                -> emit ltxt current (Just c)
+                          DFA.Change newState      -> go (newState, Just (ltxt, k+1, current)) rst
+
+           emit ltxt Nothing      Nothing  = error $ "Lexing error at end of input"
+           emit ltxt Nothing      (Just c) = error $ "Lexing error on input " ++ show c
+           emit ltxt (Just (k,t)) _        = Lexeme t (Span initPos initPos) (TL.toStrict lexeme) : go initState rest
+               where (lexeme, rest) = TL.splitAt k ltxt
+       in
+         go initState 
+     |]
+    where dfa = lexSpecDFA spec
+
+lexStringStatic :: Lift tok => CompiledLexSpec tok -> ExpQ
+lexStringStatic spec =
+    [| let initState = (0, Nothing) -- (DFA state, Pointer to start of current lexeme, Current match)
+
+           go (dfaState, matcher) txt =
+               case txt of
+                 [] ->
+                     case matcher of
+                       Nothing                 -> []
+                       Just (ltxt, _, current) -> emit ltxt current Nothing
+                 (c:rst) ->
+                     let (ltxt, k, current) = fromMaybe (txt, 0, Nothing) matcher
+                     in case $(makeTransitionFunction dfa) dfaState c of
+                          DFA.Accepting t newState -> go (newState, Just (ltxt, k+1, Just (k+1,t))) rst
+                          DFA.Error                -> emit ltxt current (Just c)
+                          DFA.Change newState      -> go (newState, Just (ltxt, k+1, current)) rst
+
+           emit ltxt Nothing      Nothing  = error $ "Lexing error at end of input"
+           emit ltxt Nothing      (Just c) = error $ "Lexing error on input " ++ show c
+           emit ltxt (Just (k,t)) _        = Lexeme t (Span initPos initPos) (T.pack lexeme) : go initState rest
+               where (lexeme, rest) = splitAt k ltxt
+       in
+         go initState 
+     |]
+    where dfa = lexSpecDFA spec
