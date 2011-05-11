@@ -34,7 +34,7 @@ main = do
              Right tokens ->
                  do exitSuccess
     Parse filename ->
-        do readResult <- P.readFoveranFile2 filename
+        do readResult <- P.readFoveranFile3 filename
            case readResult of 
              Left err ->
                  do hPutStrLn stderr $ render (P.ppInputError err)

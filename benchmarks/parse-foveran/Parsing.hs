@@ -10,15 +10,20 @@ module Parsing
     , prettyKnot
     , readFoveranFile2
     , lexFoveranFile
+    , lexFoveranFile2
+    , lexFoveranFile3
+    , readFoveranFile3
     )
     where
 
 import Data.Knot
 
+import Data.Maybe (mapMaybe)
 import Data.ByteString (ByteString)
 import Data.Type.Show
 import qualified Data.Text as T
 import qualified Data.Text.IO as TIO
+import qualified Data.Text.Lazy.IO as TLIO
 import Text.PrettyPrint
 import Text.Position
 import Control.Applicative
@@ -165,6 +170,16 @@ lexFoveranFile :: FilePath -> IO (Either InputError [Lexeme Token])
 lexFoveranFile filename = do
   onText (lexer' >>> exceptIgnorable >>| gather) <$> TIO.readFile filename
 
+lexFoveranFile2 :: FilePath -> IO Int
+lexFoveranFile2 filename = do
+  txt <- TLIO.readFile filename
+  return $ length $ $(lexTextStatic (compileLexicalSpecification lexicalSpec)) txt
+
+lexFoveranFile3 :: FilePath -> IO Int
+lexFoveranFile3 filename = do
+  txt <- readFile filename
+  return $ length $ $(lexStringStatic (compileLexicalSpecification lexicalSpec)) txt
+
 readFoveranFile2 :: FilePath -> IO (Either InputError (Knot AST File))
 readFoveranFile2 filename = do
   input <- onText (lexer' >>> exceptIgnorable >>| gather) <$> TIO.readFile filename
@@ -174,3 +189,17 @@ readFoveranFile2 filename = do
                       ParseFailure -> return $ Left (PE_UTF8DecodeError "Parse failure")
                       AmbiguityDetected x y -> return $ Left (PE_UTF8DecodeError "Ambiguity detected")
                       Success x    -> return $ Right x
+
+f (Lexeme (Emit t) p s)   = Just (Lexeme t p s)
+f (Lexeme (Ignore _) _ _) = Nothing
+
+
+
+readFoveranFile3 :: FilePath -> IO (Either InputError (Knot AST File))
+readFoveranFile3 filename = do
+  txt <- readFile filename
+  let tokens = mapMaybe f $ $(lexStringStatic (compileLexicalSpecification lexicalSpec)) txt
+  case rejectAmbiguity $ parseList grammar Decls () tokens of
+    ParseFailure -> return $ Left (PE_UTF8DecodeError "Parse failure")
+    AmbiguityDetected x y -> return $ Left (PE_UTF8DecodeError "Ambiguity detected")
+    Success x    -> return $ Right x
