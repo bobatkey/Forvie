@@ -18,6 +18,7 @@ module Data.Regexp
     , zeroOrMore
     , oneOrMore
     , tok
+    , subst
     , module Data.BooleanAlgebra
     )
     where
@@ -87,6 +88,15 @@ diffN c (NTok cl)
 diffN c (NStar ns) = diffN c ns `nSeq` NStar ns
 diffN c (NAnd ns)  = foldr nAnd nTop $ map (diffN c) $ S.elems ns
 diffN c (NNot n)   = NNot (diffN c n)
+
+{------------------------------------------------------------------------------}
+subst :: Ord b => (Set a -> Regexp b) -> Regexp a -> Regexp b
+subst f (NSeq l)  = foldr nSeq nEps $ map (subst f) l
+subst f (NAlt l)  = foldr nAlt nZero $ map (subst f) $ S.elems l
+subst f (NTok s)  = f s
+subst f (NAnd l)  = foldr nAnd nTop $ map (subst f) $ S.elems l
+subst f (NNot r)  = NNot (subst f r)
+subst f (NStar r) = nStar (subst f r)
 
 {------------------------------------------------------------------------------}
 data Regexp a
