@@ -170,7 +170,7 @@ data Result v nt where
 --------------------------------------------------------------------------------
 data St nt tok f v t
     = St { parsed          :: IM.IntMap [Result v nt]       -- start point, nonterminal recognised
-         , called          :: HS.Set (SomeCall nt)                 -- non-terminals we have predicted at this point
+         , called          :: [SomeCall nt]                 -- non-terminals we have predicted at this point
          , waitingForCall  :: [WaitingForCall nt tok f v t] -- processes that are waiting for the completion of a non-terminal
          , waitingForToken :: [WaitingForToken nt tok f v t] -- processes that are waiting for a token
          , completeParse   :: [f v t]                       -- whether a complete parse of the input has been discovered here
@@ -178,7 +178,7 @@ data St nt tok f v t
 
 initState :: St nt tok f v t
 initState = St { parsed          = IM.empty
-               , called          = HS.empty
+               , called          = []
                , waitingForCall  = []
                , waitingForToken = []
                , completeParse   = []
@@ -221,8 +221,8 @@ recordCalled :: (Hashable3 nt, Ord3 nt, Monad m, Functor m) =>
                 Call nt a
              -> M nt tok f v t m Bool
 recordCalled call = do
-  p <- HS.member (SomeCall call) <$> gets called
-  unless p $ modify $ \s -> s { called = HS.insert (SomeCall call) (called s) }
+  p <- elem (SomeCall call) <$> gets called
+  unless p $ modify $ \s -> s { called = (SomeCall call) : (called s) }
   return p
 
 addWaitingForCall :: Monad m => 
@@ -249,66 +249,59 @@ expand :: forall nt tok f v t m.
        -> m ( [WaitingForToken nt tok f v t]
             , [f v t])
 expand grammar j worklist = do
-  St _ _ wfc wft complete <- execStateT (process worklist) initState
+  St _ _ wfc wft complete <- execStateT (mapM_ process worklist) initState
   let mapping = processCalls j mapping wfc
       wft'    = doWFT j mapping wft
   --trace ("advance with " ++ show (length wft') ++ "\n") $
   return (wft', complete)
     where
-      process :: [Item nt tok f v t] -> M nt tok f v t m ()
-      process [] = return ()
-      process (Item p retAddr : worklist) = do
-        new <- concat <$> mapM (processC retAddr) (components p)
-        process (new ++ worklist)
+      process :: Item nt tok f v t -> M nt tok f v t m ()
+      process (Item p retAddr) = do
+        mapM_ (processC retAddr) (components p)
 
       processC :: forall b.
                   RetAddr nt tok f v t b
                -> Component nt tok v (f v b)
-               -> M nt tok f v t m [Item nt tok f v t]
+               -> M nt tok f v t m ()
       processC retAddr (WfToken cs p) = do
         addWaitingForToken cs p retAddr
-        return []
 
       processC TopLevel    (Accept t) = do
         addComplete t
-        return []
 
       processC (Local call) (Accept t) = do
         known <- checkKnown j call
         case known of
           Nothing -> do v <- lift $ newResult j j t
                         addKnown j call v
-                        map (mkItem v) . findCalls call <$> gets waitingForCall
+                        completed <- map (mkItem v) . findCalls call <$> gets waitingForCall
+                        mapM_ process completed
           Just v  -> do lift $ addResult v t
-                        return []
 
       processC (Previous i call l) (Accept t) = do
         known <- checkKnown i call
         case known of
           Nothing -> do v <- lift $ newResult i j t
                         addKnown i call v
-                        --trace ("Completing " ++ show (length l) ++ " for " ++ show2 call) $
-                        return $ map (mkItem v) l
+                        mapM_ process $ map (mkItem v) l
           Just v  -> do lift $ addResult v t
-                        return []
 
       processC retAddr (WfCall insideStar call p) = do
         addWaitingForCall call p retAddr
-        let loop call@(Call nt x l) newitems =
+        let loop call@(Call nt x l) =
                 do called <- recordCalled call
-                   if called then return newitems
-                    else do calls <- return [Item (grammar `getRHS` call) (Local call)]
+                   if called then return ()
+                    else do process (Item (grammar `getRHS` call) (Local call))
                             completion <-
                                if not insideStar then
                                    do known <- checkKnown j call
                                       case known of
-                                        Nothing -> return []
-                                        Just v  -> return [Item (p v) retAddr]
+                                        Nothing -> return ()
+                                        Just v  -> process (Item (p v) retAddr)
                                else
-                                   return []
-                            let newitems' = calls ++ completion ++ newitems
-                            if l == 0 then return newitems' else loop (Call nt x (l-1)) newitems'
-        loop call []
+                                   return ()
+                            if l == 0 then return () else loop (Call nt x (l-1))
+        loop call
 
 --------------------------------------------------------------------------------
 advance :: (Eq tok) =>
