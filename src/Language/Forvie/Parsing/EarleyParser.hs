@@ -64,13 +64,11 @@ parse grammar r a = expander 0 [Item rhs TopLevel]
       rhs = getRHS grammar (Call r a 0)
 
       expander i ps = do
-        (wft, c) <- expand grammar i ps
         t <- getInput
-        consumer (i+1) wft c t
-
-      consumer i wft c Nothing  = return c
-      consumer i wft _ (Just t) =
-          expander i (advance t wft)
+        (wft, c) <- expand grammar i ps t
+        case t of
+          Nothing -> return c
+          Just _  -> expander (i+1) wft
 
 parseList :: (Eq3 nt,
               Show3 nt,
@@ -90,24 +88,16 @@ parseList grammar r a = expander 0 [Item rhs TopLevel]
       rhs = getRHS grammar (Call r a 0)
 
       expander i ps input = do
-        (wft, c) <- expand grammar i ps
-        consumer (i+1) wft c input
-
-      consumer i wft c []     = return c
-      consumer i wft _ (t:ts) = expander i (advance t wft) ts
+        let (t,input') = case input of [] -> (Nothing,[]); (t:ts) -> (Just t,ts)
+        (wft, c) <- expand grammar i ps t
+        case t of
+          Nothing -> return c
+          Just _  -> expander (i+1) wft input'
 
 --------------------------------------------------------------------------------
--- 't' for toplevel (and 'v' for variable)
-data WaitingForToken nt tok f v t where
-    WfTokenRA :: tok ->
-                 (Text -> RHS nt tok v (f v b)) ->
-                 RetAddr nt tok f v t b ->
-                 WaitingForToken nt tok f v t
-
-doWFT :: Eq3 nt => Int -> [WaitingForCall nt tok f v t] -> [WaitingForToken nt tok f v t] -> [WaitingForToken nt tok f v t]
-doWFT j mapping [] = []
-doWFT j mapping (WfTokenRA tok rhs (Local call) : wfts) = WfTokenRA tok rhs (Previous j call (findCalls call mapping)) : doWFT j mapping wfts
-doWFT j mapping (WfTokenRA tok rhs ra : wfts)           = WfTokenRA tok rhs ra : doWFT j mapping wfts
+doItem :: Eq3 nt => Int -> [WaitingForCall nt tok f v t] -> Item nt tok f v t -> Item nt tok f v t
+doItem j mapping (Item rhs (Local call)) = Item rhs (Previous j call (findCalls call mapping))
+doItem j mapping (Item rhs ra)           = Item rhs ra
 
 data WaitingForCall nt tok f v t where
     WfCallRA :: Call nt a ->
@@ -152,7 +142,7 @@ data St nt tok f v t
     = St { parsed          :: IM.IntMap [Result v nt]       -- start point, nonterminal recognised
          , called          :: [SomeCall nt]                 -- non-terminals we have predicted at this point
          , waitingForCall  :: [WaitingForCall nt tok f v t] -- processes that are waiting for the completion of a non-terminal
-         , waitingForToken :: [WaitingForToken nt tok f v t] -- processes that are waiting for a token
+         , newItems        :: [Item nt tok f v t] -- processes that are waiting for a token
          , completeParse   :: [f v t]                       -- whether a complete parse of the input has been discovered here
          }
 
@@ -160,7 +150,7 @@ initState :: St nt tok f v t
 initState = St { parsed          = IM.empty
                , called          = []
                , waitingForCall  = []
-               , waitingForToken = []
+               , newItems        = []
                , completeParse   = []
                }
 
@@ -189,13 +179,12 @@ addKnown :: Monad m =>
 addKnown i call b =
     modify $ \s -> s { parsed = IM.alter (Just . (Result call b:) . fromMaybe []) i (parsed s) }
 
-addWaitingForToken :: Monad m =>
-                      tok
-                   -> (Text -> RHS nt tok v (f v b))
-                   -> RetAddr nt tok f v t b
-                   -> M nt tok f v t m ()
-addWaitingForToken cs p retAddr =
-    modify $ \s -> s { waitingForToken = WfTokenRA cs p retAddr : waitingForToken s }
+addItem :: Monad m =>
+           RHS nt tok v (f v b)
+        -> RetAddr nt tok f v t b
+        -> M nt tok f v t m ()
+addItem p retAddr =
+    modify $ \s -> s { newItems = Item p retAddr : newItems s }
 
 recordCalled :: (Eq3 nt, Monad m) =>
                 Call nt a
@@ -222,16 +211,17 @@ addComplete t = modify $ \s -> s { completeParse = t : completeParse s }
 
 --------------------------------------------------------------------------------
 expand :: forall nt tok f v t m.
-          (Eq3 nt, Show3 nt, ParseResultsMonad f v m) =>
+          (Eq tok, Eq3 nt, Show3 nt, ParseResultsMonad f v m) =>
           Grammar f nt tok
        -> Int
        -> [Item nt tok f v t]
-       -> m ( [WaitingForToken nt tok f v t]
+       -> Maybe (Lexeme tok)
+       -> m ( [Item nt tok f v t]
             , [f v t])
-expand grammar j worklist = do
+expand grammar j worklist inp = do
   St _ _ wfc wft complete <- execStateT (mapM_ process worklist) initState
   let mapping = processCalls j mapping wfc
-      wft'    = doWFT j mapping wft
+      wft'    = map (doItem j mapping) wft
   return (wft', complete)
     where
       process :: Item nt tok f v t -> M nt tok f v t m ()
@@ -242,8 +232,10 @@ expand grammar j worklist = do
                   RetAddr nt tok f v t b
                -> Component nt tok v (f v b)
                -> M nt tok f v t m ()
-      processC retAddr (WfToken cs p) = do
-        addWaitingForToken cs p retAddr
+      processC retAddr (WfToken cs p) =
+          case inp of
+            Just (Lexeme t _ x) | cs == t -> addItem (p x) retAddr
+            _                             -> return ()
 
       processC TopLevel    (Accept t) = do
         addComplete t
@@ -281,15 +273,3 @@ expand grammar j worklist = do
                                    return ()
                             if l == 0 then return () else loop (Call nt x (l-1))
         loop call
-
---------------------------------------------------------------------------------
-advance :: (Eq tok) =>
-           Lexeme tok
-        -> [WaitingForToken nt tok f v t]
-        -> [Item nt tok f v t]
-advance i                  [] = []
-advance i@(Lexeme t _ x) (WfTokenRA t' p retAddr : l)
-    = if t == t' then
-          Item (p x) retAddr : advance i l
-      else
-          advance i l
