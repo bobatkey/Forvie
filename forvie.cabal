@@ -54,8 +54,6 @@ Library
                         Language.Forvie.Editor.EmacsMode,
                         Language.Forvie.Parsing.Grammar,
                         Language.Forvie.Parsing.EarleyParser,
---                        Language.Forvie.Parsing.Arrow,
---                        Language.Forvie.Parsing.Monad,
                         Language.Forvie.SyntaxHighlight.Html,
                         Language.Forvie.Layout,
                         Data.CharSet,
@@ -68,9 +66,7 @@ Library
                         Data.Regexp,
                         Data.SExpr,
                         Data.Type.Eq,
-                        Data.Type.Ord,
                         Data.Type.Show,
-                        Data.Type.Hashable,
                         Control.StreamProcessor,
                         Control.StreamProcessor.ByteString,
                         Control.StreamProcessor.UTF8,
@@ -79,7 +75,6 @@ Library
 
   -- Packages needed in order to build this package.
   Build-depends:     	template-haskell,
---                        QuickCheck >= 2.1.1.1,
                         base >= 4,
                         array >= 0.3.0.0,
                         containers >= 0.3.0.0,
@@ -88,9 +83,7 @@ Library
                         bytestring >= 0.9.1.5,
                         pretty >= 1.0.1.1,
                         blaze-html >= 0.3.2.0,
-                        type-equality >= 0.1.0,
-                        hashable >= 1.1.1.0,
-                        hashmap >= 1.2.0.0
+                        type-equality >= 0.1.0
   
   -- Modules not exported by this package.
   Other-modules:        Control.StreamProcessor.Rewindable,

@@ -5,18 +5,11 @@ module Language.Forvie.Parsing.EarleyParser where
 import Control.Applicative
 import qualified Data.IntMap as IM
 import Data.Maybe (fromMaybe, mapMaybe, catMaybes)
-import Data.Hashable
 import Data.Text (Text)
 import Data.Type.Eq
-import Data.Type.Ord
 import Data.Type.Equality
 import Data.Type.Show
-import Data.Type.Hashable
-import qualified Data.HashSet as HS
 import Control.Monad.State
-import Control.Monad.Reader
-
---import Debug.Trace
 
 import Language.Forvie.Parsing.Grammar
 import Text.Lexeme
@@ -55,12 +48,11 @@ instance Show3 nt => Show2 (RetAddr nt tok f v t) where
     show2 (Local call) = "(Local " ++ show2 call ++ ")"
 
 --------------------------------------------------------------------------------
-parse :: (Ord3 nt, Hashable3 nt,
+parse :: (Eq3 nt,
           Show3 nt,
           Eq  tok,
           Ord  a,
           Show a,
-          Hashable a,
           ParseResultsMonad f v m,
           ParseSourceMonad tok m) =>
          Grammar f nt tok
@@ -80,13 +72,12 @@ parse grammar r a = expander 0 [Item rhs TopLevel]
       consumer i wft _ (Just t) =
           expander i (advance t wft)
 
-parseList :: (Ord3 nt, Hashable3 nt,
+parseList :: (Eq3 nt,
               Show3 nt,
               Eq  tok,
               Show tok,
               Ord  a,
               Show a,
-              Hashable a,
               ParseResultsMonad f v m,
               Ord tok) =>
              Grammar f nt tok
@@ -102,9 +93,8 @@ parseList grammar r a = expander 0 [Item rhs TopLevel]
         (wft, c) <- expand grammar i ps
         consumer (i+1) wft c input
 
-      consumer i wft c []  = return c
-      consumer i wft _ (t:ts) =
-          {-trace ("\nAdvancing on " ++ show (lexemeText t)) $-} expander i (advance t wft) ts
+      consumer i wft c []     = return c
+      consumer i wft _ (t:ts) = expander i (advance t wft) ts
 
 --------------------------------------------------------------------------------
 -- 't' for toplevel (and 'v' for variable)
@@ -152,16 +142,6 @@ instance Eq3 nt => Eq (SomeCall nt) where
     SomeCall c == SomeCall c' = case c === c' of
                                   Nothing -> False
                                   Just _  -> True
-
-instance Hashable3 nt => Hashable (SomeCall nt) where
-    hash (SomeCall (Call nt a l)) = hash3 nt `combine` hash a `combine` hash l
-    hashWithSalt = undefined -- FIXME
-
-instance (Eq3 nt, Ord3 nt) => Ord (SomeCall nt) where
-    compare (SomeCall (Call nt1 a1 l1)) (SomeCall (Call nt2 a2 l2))
-        = case nt1 ==== nt2 of
-            Just (Refl, Refl) -> compare (a1,l1) (a2,l2)
-            Nothing           -> compare3 nt1 nt2
 
 --------------------------------------------------------------------------------
 data Result v nt where
@@ -217,7 +197,7 @@ addWaitingForToken :: Monad m =>
 addWaitingForToken cs p retAddr =
     modify $ \s -> s { waitingForToken = WfTokenRA cs p retAddr : waitingForToken s }
 
-recordCalled :: (Hashable3 nt, Ord3 nt, Monad m, Functor m) =>
+recordCalled :: (Eq3 nt, Monad m, Functor m) =>
                 Call nt a
              -> M nt tok f v t m Bool
 recordCalled call = do
@@ -242,7 +222,7 @@ addComplete t = modify $ \s -> s { completeParse = t : completeParse s }
 
 --------------------------------------------------------------------------------
 expand :: forall nt tok f v t m.
-          (Ord3 nt, Hashable3 nt, Show3 nt, ParseResultsMonad f v m) =>
+          (Eq3 nt, Show3 nt, ParseResultsMonad f v m) =>
           Grammar f nt tok
        -> Int
        -> [Item nt tok f v t]
@@ -252,7 +232,6 @@ expand grammar j worklist = do
   St _ _ wfc wft complete <- execStateT (mapM_ process worklist) initState
   let mapping = processCalls j mapping wfc
       wft'    = doWFT j mapping wft
-  --trace ("advance with " ++ show (length wft') ++ "\n") $
   return (wft', complete)
     where
       process :: Item nt tok f v t -> M nt tok f v t m ()
