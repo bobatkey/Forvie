@@ -190,18 +190,18 @@ addKnown i call b =
     modify $ \s -> s { parsed = IM.alter (Just . (Result call b:) . fromMaybe []) i (parsed s) }
 
 addWaitingForToken :: Monad m =>
-                     tok
-                  -> (Text -> RHS nt tok v (f v b))
-                  -> RetAddr nt tok f v t b
-                  -> M nt tok f v t m ()
+                      tok
+                   -> (Text -> RHS nt tok v (f v b))
+                   -> RetAddr nt tok f v t b
+                   -> M nt tok f v t m ()
 addWaitingForToken cs p retAddr =
     modify $ \s -> s { waitingForToken = WfTokenRA cs p retAddr : waitingForToken s }
 
-recordCalled :: (Eq3 nt, Monad m, Functor m) =>
+recordCalled :: (Eq3 nt, Monad m) =>
                 Call nt a
              -> M nt tok f v t m Bool
 recordCalled call = do
-  p <- elem (SomeCall call) <$> gets called
+  p <- gets called >>= return . elem (SomeCall call)
   unless p $ modify $ \s -> s { called = (SomeCall call) : (called s) }
   return p
 
