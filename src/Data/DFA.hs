@@ -58,7 +58,6 @@ class (Ord r, Enum (Alphabet r), Ord (Alphabet r), Bounded (Alphabet r))
     type Alphabet r  :: *
     type Result r    :: *
     advance          :: Alphabet r -> r -> r
-    isErrorState     :: r -> Bool
     isAcceptingState :: r -> Maybe (Result r)
     classes          :: r -> Partition (Alphabet r)
 
@@ -67,7 +66,6 @@ instance (FiniteStateAcceptor r, Ord a) => FiniteStateAcceptor [(r,a)] where
     type Alphabet [(r,a)] = Alphabet r
     type Result [(r,a)] = a
     advance c        = map (first $ advance c)
-    isErrorState     = all (isErrorState . fst)
     isAcceptingState = fmap snd . find (isJust . isAcceptingState . fst)
     classes          = foldl andClasses (fromSet one) . map (classes . fst)
 
@@ -81,7 +79,6 @@ instance Ord a => FiniteStateAcceptor (DFAWithState a b) where
     type Alphabet (DFAWithState a b) = a
     type Result (DFAWithState a b)   = b
     advance c (DFAWithState dfa q) = undefined -- FIXME
-    isErrorState (DFAWithState dfa q) = undefined
     isAcceptingState (DFAWithState dfa q) = undefined
     classes (DFAWithState dfa q) = undefined -- FIXME: need something to get the domain of a total map?
 -}  
@@ -93,7 +90,7 @@ data ConstructorState re
     = CS { csStates      :: M.Map re Int
          , csNextState   :: Int
          , csTransitions :: IM.IntMap (TotalMap (Alphabet re) Int)
-         , csErrorStates :: IS.IntSet
+         , csFinalReachingStates :: IS.IntSet
          , csFinalStates :: IM.IntMap (Result re)
          }
 
@@ -109,15 +106,21 @@ setTransitions src map =
 -- FIXME: could compress all error states into one?
 newState :: FiniteStateAcceptor re => re -> ConstructorM re Int
 newState r = do
-  CS states next trans error final <- get
+  CS states next trans finalReaching final <- get
   let states' = M.insert r next states
       next'   = next + 1
-      error'  = if isErrorState r then IS.insert next error else error
+      finalReaching' = case isAcceptingState r of
+                         Nothing -> finalReaching
+                         Just _  -> IS.insert next finalReaching
       final'  = case isAcceptingState r of
                   Nothing  -> final
                   Just res -> IM.insert next res final
-  put (CS states' next' trans error' final')
+  put (CS states' next' trans finalReaching' final')
   return next
+
+-- we are exploring the state space by DFS, so we could return 'accReachable' as
+-- we go. Add everything that is 'accReachable' to some set. Take the complement
+-- of the set to get the error state set.
 
 explore :: FiniteStateAcceptor re => re -> ConstructorM re Int
 explore q = do
@@ -125,9 +128,10 @@ explore q = do
   t <- makeTotalMapM (classes q)
        $ \c -> do let q' = advance c q
                   visited <- haveVisited q'
-                  case visited of
-                    Nothing -> explore q'
-                    Just s  -> return s
+                  s'      <- case visited of Nothing -> explore q'; Just s -> return s
+                  frs     <- gets csFinalReachingStates
+                  when (IS.member s' frs) $ modify $ \cs -> cs { csFinalReachingStates = IS.insert s (csFinalReachingStates cs) }
+                  return s'
   setTransitions s t
   return s
 
@@ -140,7 +144,7 @@ explore q = do
 data DFA a b =
     DFA { -- | Transition functions of the DFA, indexed by state number.
           transitions :: Array Int (TotalMap a Int)
-          -- | The set of error states. Transitions from states in this set will always lead back to this set, annd never to an accepting state.
+          -- | The set of error states. Transitions from states in this set will always lead back to this set, and never to an accepting state.
         , errorStates :: IS.IntSet
           -- | The set of accepting states, with final values.
         , finalStates :: IM.IntMap b
@@ -156,7 +160,9 @@ makeDFA r = DFA transArray error final
     where
       init = CS M.empty 0 IM.empty IS.empty IM.empty
 
-      CS states next trans error final = execState (explore r) init
+      CS states next trans finalReaching final = execState (explore r) init
+
+      error = IS.fromList [ i | i <- [0..next-1], not (IS.member i finalReaching) ]
 
       transArray = array (0,next-1) (IM.assocs trans)
 

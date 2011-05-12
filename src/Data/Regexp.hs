@@ -53,19 +53,10 @@ instance (Ord a, Enum a, Bounded a) => DFA.FiniteStateAcceptor (Regexp a) where
     type DFA.Alphabet (Regexp a) = a
     type DFA.Result   (Regexp a) = ()
     advance c        = diffN c
-    isErrorState     = matchesNothingN
     isAcceptingState = boolToMaybe . matchesEmptyN
     classes          = classesN
 
 {------------------------------------------------------------------------------}
-matchesNothingN :: Regexp a -> Bool
-matchesNothingN (NSeq ns) = or $ map matchesNothingN ns
-matchesNothingN (NAlt ns) = and $ map matchesNothingN $ S.elems ns
-matchesNothingN (NTok c)  = Data.RangeSet.null c
-matchesNothingN (NAnd ns) = and $ map matchesNothingN $ S.elems ns
-matchesNothingN (NNot n)  = not $ matchesNothingN n
-matchesNothingN (NStar _) = False
-
 matchesEmptyN :: Regexp a -> Bool
 matchesEmptyN (NSeq ns) = and $ map matchesEmptyN ns
 matchesEmptyN (NAlt ns) = or $ map matchesEmptyN $ S.elems ns
