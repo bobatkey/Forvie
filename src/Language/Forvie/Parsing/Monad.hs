@@ -3,15 +3,16 @@
 module Language.Forvie.Parsing.Monad
     ( P
     , nt
+    , ntU
     , terminal
     , list
     , nonEmptyList
-    , PrecLevel
     , reset
     , atLevel
     , down
     , nt'
     , setLevel
+    , noPrec
     )
     where
 
@@ -25,15 +26,15 @@ data MonadRHS nt tok v a
     | Zero
     | Plus (MonadRHS nt tok v a) (MonadRHS nt tok v a)
     | Token tok (Text -> MonadRHS nt tok v a)
-    | forall x y. (Eq x, Show x) => NonTerminal (nt x y) x (v y -> MonadRHS nt tok v a)
+    | forall x y. (Eq x, Show x) => NonTerminal (nt x y) x Int (v y -> MonadRHS nt tok v a)
 
 instance Monad (MonadRHS nt tok v) where
     return = Return
-    Return a           >>= f = f a
-    Zero               >>= f = Zero
-    Plus x y           >>= f = Plus (x >>= f) (y >>= f)
-    Token tok k        >>= f = Token tok (\t -> k t >>= f)
-    NonTerminal nt x k >>= f = NonTerminal nt x (\y -> k y >>= f)
+    Return a             >>= f = f a
+    Zero                 >>= f = Zero
+    Plus x y             >>= f = Plus (x >>= f) (y >>= f)
+    Token tok k          >>= f = Token tok (\t -> k t >>= f)
+    NonTerminal nt x l k >>= f = NonTerminal nt x l (\y -> k y >>= f)
 
 instance Functor (MonadRHS nt tok v) where
     fmap = liftA
@@ -64,18 +65,21 @@ instance RHS P where
     ($$) (P k) a = P $ \() -> k a
     components (P k) = components' (k ())
 
-components' (Return a)           = [Accept a]
-components' Zero                 = []
-components' (Plus x y)           = components' x ++ components' y
-components' (Token tok y)        = [WfToken tok (P y)]
-components' (NonTerminal nt x y) = [WfCall False (Call nt x) (P y)]
+components' (Return a)             = [Accept a]
+components' Zero                   = []
+components' (Plus x y)             = components' x ++ components' y
+components' (Token tok y)          = [WfToken tok (P y)]
+components' (NonTerminal nt x l y) = [WfCall False (Call nt x l) (P y)]
 
 --------------------------------------------------------------------------------
 nt :: (Show a, Eq a) => nt a b -> P nt tok v a (v b)
-nt s = P $ \a -> NonTerminal s a Return
+nt s = P $ \a -> NonTerminal s a 0 Return
 
-nt' :: nt () b -> P nt tok v a (v b)
-nt' s = P $ \a -> NonTerminal s () Return
+ntU :: nt () b -> P nt tok v a (v b)
+ntU s = P $ \a -> NonTerminal s () 0 Return
+
+nt' :: nt () b -> P nt tok v Int (v b)
+nt' s = P $ \a -> NonTerminal s () a Return
 
 terminal :: tok -> P nt tok v a Text
 terminal tok = P $ \a -> Token tok Return
@@ -92,16 +96,19 @@ nonEmptyList :: P nt tok v a b -> P nt tok v a [b]
 nonEmptyList p = (:) <$> p <*> list p
 
 --------------------------------------------------------------------------------
-newtype PrecLevel = PL Int
-    deriving (Eq, Show)
+--newtype PrecLevel = PL Int
+--    deriving (Eq, Show)
 
-atLevel :: Int -> P nt tok v PrecLevel a -> P nt tok v PrecLevel a
-atLevel i (P k) = P $ \(PL l) -> if i <= l then k (PL i) else Zero
+atLevel :: Int -> P nt tok v Int a -> P nt tok v ((),Int) a
+atLevel i (P k) = P $ \((),l) -> if i == l then k i else Zero
 
-down :: P nt tok v PrecLevel a -> P nt tok v PrecLevel a
-down (P k) = P $ \(PL l) -> k (PL (l - 1))
+down :: P nt tok v Int a -> P nt tok v Int a
+down (P k) = P $ \l -> k (l - 1)
 
-setLevel :: Int -> P nt tok v PrecLevel a -> P nt tok v x a
-setLevel l (P k) = P $ \_ -> k (PL l)
+setLevel :: Int -> P nt tok v Int a -> P nt tok v x a
+setLevel l (P k) = P $ \_ -> k l
 
-reset = setLevel 10
+reset = setLevel 4
+
+noPrec :: P nt tok v a b -> P nt tok v (a,Int) b
+noPrec (P k) = P $ \(a,l) -> if l == 0 then k a else empty

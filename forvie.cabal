@@ -54,8 +54,6 @@ Library
                         Language.Forvie.Editor.EmacsMode,
                         Language.Forvie.Parsing.Grammar,
                         Language.Forvie.Parsing.EarleyParser,
-                        Language.Forvie.Parsing.Arrow,
-                        Language.Forvie.Parsing.Monad,
                         Language.Forvie.SyntaxHighlight.Html,
                         Language.Forvie.Layout,
                         Data.CharSet,
@@ -77,7 +75,6 @@ Library
 
   -- Packages needed in order to build this package.
   Build-depends:     	template-haskell,
---                        QuickCheck >= 2.1.1.1,
                         base >= 4,
                         array >= 0.3.0.0,
                         containers >= 0.3.0.0,

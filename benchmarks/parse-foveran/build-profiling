@@ -1,0 +1,1 @@
+ghc --make Main.hs -osuf=p_o -o parse-foveran -package-conf ../../dist/package.conf.inplace -rtsopts -prof
