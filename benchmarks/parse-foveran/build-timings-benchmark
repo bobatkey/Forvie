@@ -1,0 +1,1 @@
+ghc --make GetTimings.hs -o get-timings -package-conf ../../dist/package.conf.inplace
