@@ -35,6 +35,14 @@ data Component nt tok v a where
 
 newtype RHS nt tok v a = RHS { components :: [Component nt tok v a] }
 
+instance (Show3 nt, Show tok) => Show (Component nt tok v a) where
+    show (Accept x)        = "Accept"
+    show (WfToken t k)     = "WfToken " ++ show t
+    show (WfCall _ call k) = "WfCall " ++ show2 call
+
+instance (Show3 nt, Show tok) => Show (RHS nt tok v a) where
+    show (RHS l) = "RHS " ++ show l
+
 instance Monad (RHS nt tok v) where
     return a = RHS [Accept a]
     RHS l >>= f = RHS $ l >>= bindComponent f
