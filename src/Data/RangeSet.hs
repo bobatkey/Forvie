@@ -175,7 +175,7 @@ newtype Partition a = Partition (S.Set (Set a))
 fromSet :: (Enum a, Bounded a, Ord a) => Set a -> Partition a
 fromSet s 
     | s == everything = Partition (S.fromList [ s ])
-    | s == empty      = Partition (S.fromList [ s ])
+    | s == empty      = Partition (S.fromList [ everything ])
     | otherwise       = Partition (S.fromList [ s, Data.RangeSet.complement s ])
 
 andClasses :: (Enum a, Bounded a, Ord a) =>
