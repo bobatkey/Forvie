@@ -1,7 +1,7 @@
 {-# LANGUAGE GADTs, Arrows #-}
 
 module Grammar
-    ( grammar, NT (Decls) )
+--    ( grammar, NT (Decls) )
     where
 
 import qualified Data.Text as T
@@ -51,20 +51,54 @@ grammar :: Grammar AST NT T.Token
 grammar Decls = \_ _ -> decls []
 --                (File <$> list (call Decl <* terminal T.Semicolon))
 
-grammar Decl = noPrec
-     (Assumption <$  terminal T.Assume <*> call Iden <* terminal T.Colon <*> (callTop Term)
-  <|> TypeDecl   <$> call Iden <* terminal T.Colon <*> (callTop Term)
-  <|> Definition <$> call Iden <*> list (call Iden) <* terminal T.Equals <*> (callTop Term)
-  <|> Datatype   <$  terminal T.Data
-                 <*> call Iden
-                 <*> list ((,) <$ terminal T.LParen <*> call Iden <* terminal T.Colon <*> (callTop Term) <* terminal T.RParen)
-                 <*  terminal T.Colon <* terminal T.Set <* terminal T.ColonEquals <*> list (call Cons))
+grammar Decl = \_ _ ->
+    RHS [ assume, typedeclOrDef, datatype ]
+    where
+      assume = WfToken T.Assume $ \_ ->
+               RHS [ WfCall False (Call Iden () 0) $ \i ->
+                     RHS [ WfToken T.Colon $ \_ ->
+                           RHS [ WfCall False (Call Term () 4) $ \t ->
+                                 RHS [ Accept (Assumption i t) ] ] ] ]
+
+      typedeclOrDef = WfCall False (Call Iden () 0) $ \i ->
+                      RHS [ WfToken T.Colon $ \_ ->
+                            RHS [ WfCall False (Call Term () 4) $ \t ->
+                                  RHS [ Accept (TypeDecl i t) ] ]
+                          , WfToken T.Equals $ \_ ->
+                            RHS [ WfCall False (Call Term () 4) $ \t ->
+                                  RHS [ Accept (Definition i [] t) ] ]
+                          , WfCall False (Call Iden () 0) $ \a -> def i [a]
+                          ]
+
+      def i a = RHS [ WfToken T.Equals $ \_ ->
+                      RHS [ WfCall False (Call Term () 4) $ \t ->
+                            RHS [ Accept (Definition i [] t) ] ]
+                    , WfCall False (Call Iden () 0) $ \b -> def i (b:a)
+                    ]
+
+      datatype = WfToken T.Data $ \_ ->
+                 Datatype <$> call Iden
+                          <*> list ((,) <$ terminal T.LParen <*> call Iden <* terminal T.Colon <*> (callTop Term) <* terminal T.RParen)
+                          <*  terminal T.Colon <* terminal T.Set <* terminal T.ColonEquals <*> list (call Cons)
+                           
+
+
+-- noPrec
+--      (Assumption <$  terminal T.Assume <*> call Iden <* terminal T.Colon <*> (callTop Term)
+--   <|> TypeDecl   <$> call Iden <* terminal T.Colon <*> (callTop Term)
+--   <|> Definition <$> call Iden <*> list (call Iden) <* terminal T.Equals <*> (callTop Term)
+--   <|> Datatype   <$  terminal T.Data
+--                  <*> call Iden
+--                  <*> list ((,) <$ terminal T.LParen <*> call Iden <* terminal T.Colon <*> (callTop Term) <* terminal T.RParen)
+--                  <*  terminal T.Colon <* terminal T.Set <* terminal T.ColonEquals <*> list (call Cons))
 
 grammar Cons = noPrec
       (Constr <$ terminal T.Pipe <*> call Iden <* terminal T.Colon <*> list (callAt Term 0))
 
-grammar Iden = noPrec
-      (Identifier <$> terminal T.Ident)
+grammar Iden = \_ _ -> RHS [ WfToken T.Ident $ \t -> RHS [ Accept (Identifier t) ] ]
+
+-- noPrec
+--       (Identifier <$> terminal T.Ident)
 
 -- Idea: when we have a call to 'Term (PL 9)', the predictor ought to
 -- spark off calls to everything below that (assuming they haven't
@@ -100,43 +134,100 @@ grammar Term =
           0 -> term0
 
 term4 :: RHS NT T.Token v (AST v Term)
-term4 = ((Lam <$  terminal T.Lambda <*> nonEmptyList (call Iden) <* terminal T.FullStop <*> callAt Term 4)
-                <|> (Pi
-                     <$  terminal T.LParen
-                     <*> nonEmptyList (call Iden)
-                     <*  terminal T.Colon
-                     <*> callAt Term 4
-                     <*  terminal T.RParen
-                     <*  terminal T.Arrow
-                     <*> callAt Term 4)
-                <|> (Sigma
-                     <$  terminal T.LParen
-                     <*> nonEmptyList (call Iden)
-                     <*  terminal T.Colon
-                     <*> callAt Term 4
-                     <*  terminal T.RParen
-                     <*  terminal T.Times
-                     <*> callAt Term 4)
-                <|> (Arr <$> callAt Term 3 <*  terminal T.Arrow <*> callAt Term 4))
+term4 = RHS [ WfToken T.Lambda $ \_ -> RHS [ WfCall False (Call Iden () 0) $ \v -> lambda [v] ]
+            , WfToken T.LParen $ \_ -> RHS [ WfCall False (Call Iden () 0) $ \v -> piOrSigma [v] ]
+            , WfCall False (Call Term () 3) $ \v1 ->
+                RHS [ WfToken T.Arrow $ \_ ->
+                          RHS [ WfCall False (Call Term () 4) $ \v2 ->
+                                    RHS [ Accept (Arr v1 v2) ] ]]
+            ]
+    where
+      lambda nms = RHS [ WfToken T.FullStop $ \_ -> RHS [ WfCall False (Call Term () 4) $ \v -> RHS [ Accept (Lam (reverse nms) v) ] ]
+                       , WfCall False (Call Iden () 0) $ \v -> lambda (v:nms)
+                       ]
+
+      piOrSigma nms = RHS [ WfToken T.Colon $ \_ ->
+                            RHS [ WfCall False (Call Term () 4) $ \vt ->
+                                  RHS [ WfToken T.RParen $ \_ ->
+                                        RHS [ WfToken T.Arrow $ \_ ->
+                                              RHS [ WfCall False (Call Term () 4) $ \vt' ->
+                                                    RHS [ Accept (Pi (reverse nms) vt vt') ] ]
+                                            , WfToken T.Times $ \_ ->
+                                              RHS [ WfCall False (Call Term () 4) $ \vt' ->
+                                                    RHS [ Accept (Sigma (reverse nms) vt vt') ] ]
+                                            ]
+                                      ]
+                                ]
+                          , WfCall False (Call Iden () 0) $ \v -> piOrSigma (v:nms)
+                          ]
+                  
+-- ((Lam <$  terminal T.Lambda <*> nonEmptyList (call Iden) <* terminal T.FullStop <*> callAt Term 4)
+--                 <|> (Pi
+--                      <$  terminal T.LParen
+--                      <*> nonEmptyList (call Iden)
+--                      <*  terminal T.Colon
+--                      <*> callAt Term 4
+--                      <*  terminal T.RParen
+--                      <*  terminal T.Arrow
+--                      <*> callAt Term 4)
+--                 <|> (Sigma
+--                      <$  terminal T.LParen
+--                      <*> nonEmptyList (call Iden)
+--                      <*  terminal T.Colon
+--                      <*> callAt Term 4
+--                      <*  terminal T.RParen
+--                      <*  terminal T.Times
+--                      <*> callAt Term 4)
+--                 <|> (Arr <$> callAt Term 3 <*  terminal T.Arrow <*> callAt Term 4))
 
 term3 :: RHS NT T.Token v (AST v Term)
-term3 = ((Sum <$> callAt Term 2 <*  terminal T.Plus <*> callAt Term 3)
-                <|> (Desc_Sum <$> callAt Term 2 <* terminal T.QuotePlus <*> callAt Term 3))
+term3 = RHS [ WfCall False (Call Term () 2) $ \v ->
+                  RHS [ WfToken T.Plus $ \_ -> RHS [ WfCall False (Call Term () 3) $ \v' -> RHS [ Accept (Sum v v') ] ]
+                      , WfToken T.QuotePlus $ \_ -> RHS [ WfCall False (Call Term () 3) $ \v' -> RHS [ Accept (Desc_Sum v v') ] ]
+                      ]
+            ]
+
+-- ((Sum <$> callAt Term 2 <*  terminal T.Plus <*> callAt Term 3)
+--                 <|> (Desc_Sum <$> callAt Term 2 <* terminal T.QuotePlus <*> callAt Term 3))
 
 term2 :: RHS NT T.Token v (AST v Term)
-term2 = ((Prod <$> callAt Term 1 <*  terminal T.Times <*> callAt Term 2)
-                <|> (Desc_Prod <$> callAt Term 1 <*  terminal T.QuoteTimes <*> callAt Term 2))
+term2 = RHS [ WfCall False (Call Term () 1) $ \v ->
+                  RHS [ WfToken T.Times $ \_ -> RHS [ WfCall False (Call Term () 2) $ \v' -> RHS [ Accept (Prod v v') ] ]
+                      , WfToken T.QuoteTimes $ \_ -> RHS [ WfCall False (Call Term () 2) $ \v' -> RHS [ Accept (Desc_Prod v v') ] ]
+                      ]
+            ]
+
+-- ((Prod <$> callAt Term 1 <*  terminal T.Times <*> callAt Term 2)
+--                 <|> (Desc_Prod <$> callAt Term 1 <*  terminal T.QuoteTimes <*> callAt Term 2))
 
 term1 :: RHS NT T.Token v (AST v Term)
-term1 = (Inl <$  terminal T.Inl <*> callAt Term 0)
-                <|> (Inr <$  terminal T.Inr <*> callAt Term 0)
-                <|> (Desc_K <$ terminal T.QuoteK <*> callAt Term 0)
-                <|> (Mu     <$ terminal T.Mu <*> callAt Term 0)
-                <|> (Construct <$ terminal T.Construct <*> callAt Term 0)
-                <|> (IDesc_Id  <$ terminal T.Quote_IId <*> callAt Term 0)
-                <|> (IDesc_Sg  <$ terminal T.Quote_Sg <*> callAt Term 0 <*> callAt Term 0)
-                <|> (IDesc_Pi  <$ terminal T.Quote_Pi <*> callAt Term 0 <*> callAt Term 0)
-                <|> (App <$> callAt Term 0 <*> nonEmptyList (callAt Term 0))
+term1 = RHS [ WfToken T.Inl $ \_ -> RHS [ WfCall False (Call Term () 0) $ \v -> RHS [ Accept (Inl v) ] ]
+            , WfToken T.Inr $ \_ -> RHS [ WfCall False (Call Term () 0) $ \v -> RHS [ Accept (Inr v) ] ]
+            , WfToken T.QuoteK $ \_ -> RHS [ WfCall False (Call Term () 0) $ \v -> RHS [ Accept (Desc_K v) ] ]
+            , WfToken T.Mu $ \_ -> RHS [ WfCall False (Call Term () 0) $ \v -> RHS [ Accept (Mu v) ] ]
+            , WfToken T.Construct $ \_ -> RHS [ WfCall False (Call Term () 0) $ \v -> RHS [ Accept (Construct v) ] ]
+            , WfToken T.Quote_IId $ \_ -> RHS [ WfCall False (Call Term () 0) $ \v -> RHS [ Accept (IDesc_Id v) ] ]
+            , WfToken T.Quote_Sg $ \_ -> RHS [ WfCall False (Call Term () 0) $ \v1 -> RHS [ WfCall False (Call Term () 0) $ \v2 -> RHS [ Accept (IDesc_Sg v1 v2) ] ] ]
+            , WfToken T.Quote_Pi $ \_ -> RHS [ WfCall False (Call Term () 0) $ \v1 -> RHS [ WfCall False (Call Term () 0) $ \v2 -> RHS [ Accept (IDesc_Pi v1 v2) ] ] ]
+            , WfCall False (Call Term () 0) $ \x ->
+                RHS [ WfCall False (Call Term () 0) $ \y -> app x [y] ]
+            ]
+    where
+      app x ys = RHS [ Accept (App x (reverse ys))
+                     , WfCall False (Call Term () 0) $ \y -> app x (y:ys)
+                     ]
+                          
+
+
+-- (Inl <$  terminal T.Inl <*> callAt Term 0)
+--                 <|> (Inr <$  terminal T.Inr <*> callAt Term 0)
+--                 <|> (Desc_K <$ terminal T.QuoteK <*> callAt Term 0)
+--                 <|> (Mu     <$ terminal T.Mu <*> callAt Term 0)
+--                 <|> (Construct <$ terminal T.Construct <*> callAt Term 0)
+--                 <|> (IDesc_Id  <$ terminal T.Quote_IId <*> callAt Term 0)
+--                 <|> (IDesc_Sg  <$ terminal T.Quote_Sg <*> callAt Term 0 <*> callAt Term 0)
+--                 <|> (IDesc_Pi  <$ terminal T.Quote_Pi <*> callAt Term 0 <*> callAt Term 0)
+--                 <|> (App <$> callAt Term 0 <*> nonEmptyList (callAt Term 0))
 
 term0 :: RHS NT T.Token v (AST v Term)
 term0 = (Proj1 <$ terminal T.Fst <*> callAt Term 0
