@@ -49,11 +49,13 @@ boolToMaybe True  = Just ()
 boolToMaybe False = Nothing
 
 instance (Ord a, Enum a, Bounded a) => DFA.FiniteStateAcceptor (Regexp a) where
+    type DFA.State    (Regexp a) = Regexp a
     type DFA.Alphabet (Regexp a) = a
     type DFA.Result   (Regexp a) = ()
-    advance c        = diffN c
-    isAcceptingState = boolToMaybe . matchesEmptyN
-    classes          = classesN
+    initState r        = r
+    advance _ c        = diffN c
+    isAcceptingState _ = boolToMaybe . matchesEmptyN
+    classes _          = classesN
 
 {------------------------------------------------------------------------------}
 matchesEmptyN :: Regexp a -> Bool

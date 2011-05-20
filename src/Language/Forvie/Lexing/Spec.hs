@@ -1,4 +1,4 @@
-{-# LANGUAGE TemplateHaskell, TypeFamilies #-}
+{-# LANGUAGE TemplateHaskell, TypeFamilies, TypeOperators #-}
 
 -- |
 -- Module      : Language.Forvie.Lexing.Spec
@@ -25,6 +25,7 @@ module Language.Forvie.Lexing.Spec
       
       -- * Specification of Lexical Structure
       LexicalSpecification (..)
+    , (:==>) (..)
       
     -- ** Exported Modules
     -- | The "Data.Regexp" module is re-exported from this module for
@@ -51,6 +52,7 @@ module Language.Forvie.Lexing.Spec
     )
     where
 
+import           Data.Functor ((<$>))
 import           Language.Haskell.TH.Syntax
 import qualified Data.DFA as DFA
 import           Data.Regexp
@@ -59,12 +61,24 @@ import           Data.CharSet
 -- $example
 -- FIXME: do an example
 
+data a :==> b = a :==> b
+    deriving (Eq, Ord, Show)
+
+instance DFA.FiniteStateAcceptor r => DFA.FiniteStateAcceptor (r :==> a) where
+     type DFA.State (r :==> a)    = DFA.State r
+     type DFA.Alphabet (r :==> a) = DFA.Alphabet r
+     type DFA.Result (r :==> a)   = a
+     initState (r :==> a) = DFA.initState r
+     advance (r :==> a) c s = DFA.advance r c s
+     isAcceptingState (r :==> a) s = const a <$> DFA.isAcceptingState r s
+     classes (r :==> a) s = DFA.classes r s
+
 -- | A 'LexicalSpecification' represents the specification of the
 -- lexical structure of a language.
 --
 -- A specification consists of a list of regular expressions (of type
 -- 'Regexp') each with an associated semantic value.
-type LexicalSpecification tok = [(Regexp Char, tok)]
+type LexicalSpecification tok = [Regexp Char :==> tok]
 
 
 -- | A rough classification of lexemes, used for syntax highlighting.

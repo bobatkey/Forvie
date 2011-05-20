@@ -17,14 +17,17 @@ import Language.Forvie.Lexing.Generator
 data Token = Text | Variable deriving (Show, Eq, Ord)
 
 lexicalSpec = compileLexicalSpecification
-    [ ( "$" .>>. oneOrMore (tok (interval 'A' 'Z' .|. interval 'a' 'z' .|. interval '0' '9')) .>>. "$"
-      , Variable)
+    [ "$" .>>. oneOrMore (tok (interval 'A' 'Z' .|. interval 'a' 'z' .|. interval '0' '9')) .>>. "$"
+      :==>
+      Variable
 
-    , ( oneOrMore (tok (complement (singleton '$')))
-      , Text)
+    , oneOrMore (tok (complement (singleton '$')))
+      :==>
+      Text
 
-    , ( "$"
-      , Text)
+    , "$"
+      :==>
+      Text
     ]
 
 findVariables :: LexingError e => SP e Char (Lexeme Token)
