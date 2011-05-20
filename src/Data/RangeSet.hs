@@ -45,6 +45,7 @@ module Data.RangeSet
     , makeTotalMapM
     , lookup
     , assocs
+    , domain
     )
     where
 
@@ -189,8 +190,8 @@ andClasses (Partition x) (Partition y) =
 --------------------------------------------------------------------------------
 -- FIXME: need a better representation than this
 -- Should be a balanced tree
-newtype TotalMap a b = TotalMap [(Set a,b)]
-    deriving Show
+newtype TotalMap a b = TotalMap { unTotalMap :: [(Set a,b)] }
+    deriving (Eq, Ord, Show)
 
 makeTotalMap :: Partition a -> (a -> b) -> TotalMap a b
 makeTotalMap (Partition sets) f =
@@ -201,6 +202,10 @@ makeTotalMapM (Partition sets) f =
     do mappings <- forM (S.elems sets) $ \set -> do b <- f (fromJust $ getRepresentative set)
                                                     return (set, b)
        return (TotalMap mappings)
+
+-- FIXME: this is the wrong name
+domain :: Ord a => TotalMap a b -> Partition a
+domain = Partition . S.fromList . map fst . unTotalMap
 
 lookup :: Ord a => TotalMap a b -> a -> b
 lookup (TotalMap mappings) a = go mappings

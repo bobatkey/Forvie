@@ -149,7 +149,7 @@ data DFA a b =
           -- | The set of accepting states, with final values.
         , finalStates :: IM.IntMap b
         }
-    deriving Show
+    deriving (Eq, Ord, Show)
 
 instance Functor (DFA a) where
     fmap f dfa =
