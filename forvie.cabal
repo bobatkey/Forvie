@@ -74,15 +74,15 @@ Library
                         Control.StreamProcessor.IO
 
   -- Packages needed in order to build this package.
-  Build-depends:     	template-haskell,
+  Build-depends:     	template-haskell >= 2.5.0.0,
                         base >= 4,
                         array >= 0.3.0.0,
                         containers >= 0.3.0.0,
-                        text >= 0.11.0.0,
+                        text >= 0.11.0.8,
                         mtl >= 2.0.1.0,
-                        bytestring >= 0.9.1.5,
+                        bytestring >= 0.9.1.10,
                         pretty >= 1.0.1.1,
-                        blaze-html >= 0.3.2.0,
+                        blaze-html >= 0.4.1.1,
                         type-equality >= 0.1.0
   
   -- Modules not exported by this package.
