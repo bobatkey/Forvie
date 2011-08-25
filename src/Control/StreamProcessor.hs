@@ -47,6 +47,7 @@ module Control.StreamProcessor
       
     -- * Stream Processors
       SP (..)
+    , run
     -- ** Primitive Stream Processors
     , (>>>)
     , mapSP
