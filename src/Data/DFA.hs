@@ -1,4 +1,4 @@
-{-# LANGUAGE PackageImports, TypeFamilies, FlexibleInstances, FlexibleContexts #-}
+{-# LANGUAGE PackageImports, TypeFamilies, FlexibleInstances, FlexibleContexts, TypeOperators #-}
 
 -- |
 -- Module           :  Data.DFA
@@ -40,8 +40,9 @@ module Data.DFA
     where
 
 import           Prelude hiding (lookup)
+import           Control.Applicative
 import           Control.Arrow (first)
-import           Data.Maybe (isJust)
+import           Data.Maybe (isJust, listToMaybe, mapMaybe)
 import qualified Data.Set as S
 import qualified Data.Map as M
 import qualified Data.IntMap as IM
@@ -50,53 +51,44 @@ import           Data.Array (Array, array, (!))
 import           Data.RangeSet
 import           Data.BooleanAlgebra (one)
 import           Data.List  (find)
-import "mtl"     Control.Monad.State
+import qualified Control.Monad.State as S
+import           Control.Monad.State (get, modify, put, gets, execState, when)
 
 {------------------------------------------------------------------------------}
-class (Ord r, Enum (Alphabet r), Ord (Alphabet r), Bounded (Alphabet r))
+class (Ord (State r), Enum (Alphabet r), Ord (Alphabet r), Bounded (Alphabet r))
     => FiniteStateAcceptor r where
+    type State r     :: *
     type Alphabet r  :: *
     type Result r    :: *
-    advance          :: Alphabet r -> r -> r
-    isAcceptingState :: r -> Maybe (Result r)
-    classes          :: r -> Partition (Alphabet r)
+    initState        :: r -> State r
+    advance          :: r -> Alphabet r -> State r -> State r
+    isAcceptingState :: r -> State r -> Maybe (Result r)
+    classes          :: r -> State r -> Partition (Alphabet r)
 
--- FIXME: Make a newtype constructor for this.
-instance (FiniteStateAcceptor r, Ord a) => FiniteStateAcceptor [(r,a)] where
-    type Alphabet [(r,a)] = Alphabet r
-    type Result [(r,a)] = a
-    advance c        = map (first $ advance c)
-    isAcceptingState = fmap snd . find (isJust . isAcceptingState . fst)
-    classes          = foldl andClasses (fromSet one) . map (classes . fst)
+-- really, vectors, but I can't be bothered
+instance FiniteStateAcceptor r => FiniteStateAcceptor [r] where
+    type State [r]    = [State r]
+    type Alphabet [r] = Alphabet r
+    type Result [r]   = Result r
 
-data DFAWithState a b = DFAWithState (DFA a b) Int
-
-toDFAWithState :: DFA a b -> DFAWithState a b
-toDFAWithState dfa = DFAWithState dfa 0
-
-{-
-instance Ord a => FiniteStateAcceptor (DFAWithState a b) where
-    type Alphabet (DFAWithState a b) = a
-    type Result (DFAWithState a b)   = b
-    advance c (DFAWithState dfa q) = undefined -- FIXME
-    isAcceptingState (DFAWithState dfa q) = undefined
-    classes (DFAWithState dfa q) = undefined -- FIXME: need something to get the domain of a total map?
--}  
--- FIXME: can we do DFA minimisation with this setup?
+    initState r = map initState r
+    advance r c s = map (\(r,s) -> advance r c s) $ zip r s
+    isAcceptingState r = listToMaybe . mapMaybe (\(r,s) -> isAcceptingState r s) . zip r
+    classes r = foldl andClasses (fromSet one) . map (\(r,s) -> classes r s) . zip r
 
 {------------------------------------------------------------------------------}
 -- DFA construction
 data ConstructorState re
-    = CS { csStates      :: M.Map re Int
+    = CS { csStates      :: M.Map (State re) Int
          , csNextState   :: Int
          , csTransitions :: IM.IntMap (TotalMap (Alphabet re) Int)
          , csFinalReachingStates :: IS.IntSet
          , csFinalStates :: IM.IntMap (Result re)
          }
 
-type ConstructorM re a = State (ConstructorState re) a
+type ConstructorM re a = S.State (ConstructorState re) a
 
-haveVisited :: Ord re => re -> ConstructorM re (Maybe Int)
+haveVisited :: Ord (State re) => State re -> ConstructorM re (Maybe Int)
 haveVisited r = get >>= return . M.lookup r . csStates
 
 setTransitions :: FiniteStateAcceptor re => Int -> TotalMap (Alphabet re) Int -> ConstructorM re ()
@@ -104,15 +96,15 @@ setTransitions src map =
     modify $ \s -> s { csTransitions = IM.insert src map (csTransitions s) }
 
 -- FIXME: could compress all error states into one?
-newState :: FiniteStateAcceptor re => re -> ConstructorM re Int
-newState r = do
+newState :: FiniteStateAcceptor re => re -> State re -> ConstructorM re Int
+newState r st = do
   CS states next trans finalReaching final <- get
-  let states' = M.insert r next states
+  let states' = M.insert st next states
       next'   = next + 1
-      finalReaching' = case isAcceptingState r of
+      finalReaching' = case isAcceptingState r st of
                          Nothing -> finalReaching
                          Just _  -> IS.insert next finalReaching
-      final'  = case isAcceptingState r of
+      final'  = case isAcceptingState r st of
                   Nothing  -> final
                   Just res -> IM.insert next res final
   put (CS states' next' trans finalReaching' final')
@@ -122,13 +114,13 @@ newState r = do
 -- we go. Add everything that is 'accReachable' to some set. Take the complement
 -- of the set to get the error state set.
 
-explore :: FiniteStateAcceptor re => re -> ConstructorM re Int
-explore q = do
-  s <- newState q
-  t <- makeTotalMapM (classes q)
-       $ \c -> do let q' = advance c q
+explore :: FiniteStateAcceptor re => re -> State re -> ConstructorM re Int
+explore r q = do
+  s <- newState r q
+  t <- makeTotalMapM (classes r q)
+       $ \c -> do let q' = advance r c q
                   visited <- haveVisited q'
-                  s'      <- case visited of Nothing -> explore q'; Just s -> return s
+                  s'      <- case visited of Nothing -> explore r q'; Just s -> return s
                   frs     <- gets csFinalReachingStates
                   when (IS.member s' frs) $ modify $ \cs -> cs { csFinalReachingStates = IS.insert s (csFinalReachingStates cs) }
                   return s'
@@ -160,7 +152,7 @@ makeDFA r = DFA transArray error final
     where
       init = CS M.empty 0 IM.empty IS.empty IM.empty
 
-      CS states next trans finalReaching final = execState (explore r) init
+      CS states next trans finalReaching final = execState (explore r (initState r)) init
 
       error = IS.fromList [ i | i <- [0..next-1], not (IS.member i finalReaching) ]
 
