@@ -34,13 +34,3 @@ makeSpan x y = Span (regionLeft x) (regionRight y)
 instance Regioned Span where
   regionLeft (Span l _)  = l
   regionRight (Span _ r) = r
-  
-{-
-instance Regioned r => Regioned (AnnotRec r f) where
-  regionLeft (Annot r _) = regionLeft r
-  regionRight (Annot r _) = regionRight r
--}
-
-instance Regioned r => Regioned [r] where
-  regionLeft (x:_) = regionLeft x
-  regionRight l    = regionRight (last l)
