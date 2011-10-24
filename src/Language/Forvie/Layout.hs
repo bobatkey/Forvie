@@ -56,8 +56,8 @@ class Eq tok => Layout tok where
 --------------------------------------------------------------------------------
 data WithLayout a
     = LLexeme     (Lexeme a)
-    | IndentCurly Int
-    | IndentAngle Int
+    | IndentCurly Span Int
+    | IndentAngle Span Int
       deriving (Show, Eq, Ord)
 
 -- takes a stream of lexemes with explicit newlines, and outputs a
@@ -83,7 +83,7 @@ insertLayout = afterBlockOpen
                 = if t == lbrace then
                       Put (LLexeme (Lexeme t p s)) $ go
                   else
-                      Put (IndentCurly (posColumnNum (regionLeft p) + 1)) $
+                      Put (IndentCurly p (posColumnNum (regionLeft p) + 1)) $
                       Put (LLexeme (Lexeme t p s)) $
                       if blockOpener t then afterBlockOpen else go
 
@@ -92,7 +92,7 @@ insertLayout = afterBlockOpen
             afterNewline' Nothing = eos
             afterNewline' (Just (Lexeme Newline _ _)) = afterNewline
             afterNewline' (Just (Lexeme (Token t) p s))
-                = Put (IndentAngle (posColumnNum (regionLeft p) + 1)) $
+                = Put (IndentAngle p (posColumnNum (regionLeft p) + 1)) $
                   Put (LLexeme (Lexeme t p s)) $
                   if blockOpener t then afterBlockOpen else go
 
@@ -109,22 +109,22 @@ computeLayout = go []
       -- FIXME: could be cleverer about these spans, computing sensible ones
       -- from the ones in the input
       -- FIXME: why these strings?
-      semicolonLexeme = Lexeme semicolon (Span initPos initPos) ";"
-      lbraceLexeme = Lexeme lbrace (Span initPos initPos) "{"
-      rbraceLexeme = Lexeme rbrace (Span initPos initPos) "}"
+      semicolonLexeme p = Lexeme semicolon p ";"
+      lbraceLexeme p = Lexeme lbrace p "{"
+      rbraceLexeme p = Lexeme rbrace p "}"
 
       go stack = Get $ go' stack
           where
-            go' ms     (Just (IndentAngle n))
+            go' ms     (Just (IndentAngle p n))
                 = case ms of
-                    (m:ms) | m == n -> Put semicolonLexeme $ go (m:ms)
-                           | n < m  -> Put rbraceLexeme $ go' ms (Just (IndentAngle n))
+                    (m:ms) | m == n -> Put (semicolonLexeme p) $ go (m:ms)
+                           | n < m  -> Put (rbraceLexeme p) $ go' ms (Just (IndentAngle p n))
                     ms              -> go ms
-            go' ms     (Just (IndentCurly n))
+            go' ms     (Just (IndentCurly p n))
                 = case ms of
-                    (m:ms) | n > m -> Put lbraceLexeme $ go (n:m:ms)
-                    []     | n > 0 -> Put lbraceLexeme $ go [n]
-                    ms             -> Put lbraceLexeme $ Put rbraceLexeme $ go' ms (Just (IndentAngle n))
+                    (m:ms) | n > m -> Put (lbraceLexeme p) $ go (n:m:ms)
+                    []     | n > 0 -> Put (lbraceLexeme p) $ go [n]
+                    ms             -> Put (lbraceLexeme p) $ Put (rbraceLexeme p) $ go' ms (Just (IndentAngle p n))
             go' (0:ms) (Just (LLexeme l@(Lexeme t p s)))
                 | t == rbrace      = Put l $ go ms
             go' ms     (Just (LLexeme (Lexeme t p _)))
@@ -136,7 +136,7 @@ computeLayout = go []
             go' []     Nothing
                 = EOS
             go' (m:ms) Nothing
-                = Put rbraceLexeme $ go' ms Nothing
+                = Put (rbraceLexeme (Span initPos initPos)) $ go' ms Nothing -- FIXME: location should be 'at end of input'
 
 layout :: (LayoutError e, Layout tok) =>
           SP e (Lexeme (NewlineOr tok)) (Lexeme tok)
