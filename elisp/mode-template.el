@@ -10,7 +10,8 @@
 	((eq classification 'whitespace)  'default)
 	((eq classification 'constant)    'font-lock-constant-face)
 	((eq classification 'operator)    'font-lock-keyword-face)
-	((eq classification 'constructor) 'font-lock-constant-face)))
+	((eq classification 'constructor) 'font-lock-constant-face)
+        ((eq classification 'type)        'font-lock-type-face)))
 
 ;; FIXME: replace 'org-unmodified' with 'with-slient-modifications'.
 ;; See: http://stackoverflow.com/questions/2699857/emacs-how-to-intelligently-handle-buffer-modified-when-setting-text-properties

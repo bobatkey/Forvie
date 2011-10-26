@@ -91,6 +91,7 @@ data Classification
     | Constant     -- ^ Constants, usually strings and integers
     | Operator     -- ^ Usually infix operators
     | Constructor  -- ^ Constructors of data
+    | Type         -- ^ Names of types
     deriving (Eq, Ord, Show)
 
 instance Lift Classification where
@@ -102,6 +103,7 @@ instance Lift Classification where
     lift Operator    = [| Operator |]
     lift Constant    = [| Constant |]
     lift Constructor = [| Constructor |]
+    lift Type        = [| Type |]
 
 -- | Instances of this class are able to classify themselves into a
 -- specific 'Classification' for the purposes of syntax highlighting.

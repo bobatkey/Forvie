@@ -24,6 +24,7 @@ instance ShowSExpr Classification where
     showSExpr Constant    = Atom "'constant"
     showSExpr Operator    = Atom "'operator"
     showSExpr Constructor = Atom "'constructor"
+    showSExpr Type        = Atom "'type"
 
 generateElisp :: SyntaxHighlight tok =>
                  String ->

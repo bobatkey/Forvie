@@ -42,6 +42,7 @@ classOf tok =
       Constant    -> H.span ! A.class_ "constant"
       Constructor -> H.span ! A.class_ "constructor"
       Whitespace  -> \x -> x
+      Type        -> H.span ! A.class_ "type"
 
 -- | Convert a stream of 'Lexeme's tagged with 'SyntaxHighlight'able
 -- tokens into a piece of @pre@formatted HTML. Each non-'WhiteSpace'
@@ -61,6 +62,8 @@ classOf tok =
 --    ['Constant'] becomes @constant@.
 -- 
 --    ['Constructor'] becomes @constructor@.
+--
+--    ['Type'] becomes @type@.
 --
 -- The entire output is then wrapped in a @\<pre\>@ tag.
 generateHtml :: SyntaxHighlight tok => SR e (Lexeme tok) H.Html
