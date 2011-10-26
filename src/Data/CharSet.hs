@@ -34,7 +34,6 @@ module Data.CharSet
     where
 
 import Prelude hiding (null)
-import Data.List (intercalate)
 import Data.String
 import Data.BooleanAlgebra
 import Data.RangeSet
@@ -50,6 +49,7 @@ anyChar = one
 {------------------------------------------------------------------------------}
 -- Some character sets
 -- FIXME: split this out?
+xmlNameStartChar :: CSet
 xmlNameStartChar = singleton ':'
                    .|.
                    interval 'A' 'Z'
@@ -80,6 +80,7 @@ xmlNameStartChar = singleton ':'
                    .|.
                    interval '\x10000' '\xeffff'
 
+xmlNameChar :: CSet
 xmlNameChar  = xmlNameStartChar
                .|.
                singleton '-'
@@ -94,11 +95,16 @@ xmlNameChar  = xmlNameStartChar
                .|.
                interval '\x203f' '\x2040'
 
+mathematicalOperators :: CSet
 mathematicalOperators = interval '\x2200' '\x22ff'
 
+nameStartChar :: CSet
 nameStartChar = xmlNameStartChar .|. mathematicalOperators
+
+nameChar :: CSet
 nameChar = xmlNameChar .|. mathematicalOperators .|. singleton '\''
 
+digit :: CSet
 digit = interval '0' '9'
 
 space :: CSet

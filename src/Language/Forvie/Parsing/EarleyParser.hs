@@ -4,8 +4,7 @@ module Language.Forvie.Parsing.EarleyParser where
 
 import Control.Applicative
 import qualified Data.IntMap as IM
-import Data.Maybe (fromMaybe, mapMaybe, catMaybes)
-import Data.Text (Text)
+import Data.Maybe (fromMaybe)
 import Data.Type.Eq
 import Data.Type.Equality
 import Data.Type.Show

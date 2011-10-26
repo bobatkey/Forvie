@@ -45,6 +45,7 @@ classesN (NNot n)  = classesN n
 {------------------------------------------------------------------------------}
 -- Class instance
 
+boolToMaybe :: Bool -> Maybe ()
 boolToMaybe True  = Just ()
 boolToMaybe False = Nothing
 
@@ -116,16 +117,24 @@ oneOrMore n = n .>>. star n
 tok :: Set a -> Regexp a
 tok cs = NTok cs
 
+nEps :: Regexp a
 nEps  = NSeq []
+
+nZero :: Regexp a
 nZero = NAlt S.empty
+
+nTop :: Regexp a
 nTop  = NNot nZero
 
+isBottom :: Regexp a -> Bool
 isBottom (NAlt s) = S.null s
 isBottom _        = False
 
+isTop :: Regexp a -> Bool
 isTop (NNot x) = isBottom x
 isTop _        = False
 
+nSeq :: Regexp a -> Regexp a -> Regexp a
 nSeq (NSeq x) (NSeq y) = NSeq (x ++ y)
 nSeq x        (NSeq y)
     | isBottom x       = nZero
@@ -138,6 +147,7 @@ nSeq x          y
     | isBottom y       = nZero
     | otherwise        = NSeq [x,y]
 
+nAlt :: Ord a => Regexp a -> Regexp a -> Regexp a
 nAlt (NAlt x) (NAlt y) = NAlt (S.union x y)
 nAlt x        (NAlt y) 
     | isTop x          = NNot nZero
@@ -154,6 +164,7 @@ nAlt x        y
 -- construction algorithm (need the ones for 'and' as well as
 -- 'or'. This is not mentioned in the Owens et al paper, but they
 -- implement it anyway).
+nAnd :: Ord a => Regexp a -> Regexp a -> Regexp a
 nAnd (NAnd x) (NAnd y) = NAnd (S.union x y)
 nAnd x        (NAnd y) 
     | isTop x          = NAnd y
@@ -170,7 +181,8 @@ nAnd x        y
     | isBottom y       = nZero
     | otherwise        = NAnd (S.fromList [x,y])
 
-nStar (NStar r) = NStar r
-nStar (NSeq []) = NSeq []
-nStar x | isBottom x = NSeq []
-        | otherwise  = NStar x
+-- I wonder why this isn't used?
+-- nStar (NStar r) = NStar r
+-- nStar (NSeq []) = NSeq []
+-- nStar x | isBottom x = NSeq []
+--         | otherwise  = NStar x

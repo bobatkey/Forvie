@@ -40,17 +40,13 @@ module Data.DFA
     where
 
 import           Prelude hiding (lookup)
-import           Control.Applicative
-import           Control.Arrow (first)
-import           Data.Maybe (isJust, listToMaybe, mapMaybe)
-import qualified Data.Set as S
+import           Data.Maybe (listToMaybe, mapMaybe)
 import qualified Data.Map as M
 import qualified Data.IntMap as IM
 import qualified Data.IntSet as IS
 import           Data.Array (Array, array, (!))
 import           Data.RangeSet
 import           Data.BooleanAlgebra (one)
-import           Data.List  (find)
 import qualified Control.Monad.State as S
 import           Control.Monad.State (get, modify, put, gets, execState, when)
 
@@ -80,10 +76,10 @@ instance FiniteStateAcceptor r => FiniteStateAcceptor [r] where
 -- DFA construction
 data ConstructorState re
     = CS { csStates      :: M.Map (State re) Int
-         , csNextState   :: Int
+         , _csNextState   :: Int
          , csTransitions :: IM.IntMap (TotalMap (Alphabet re) Int)
          , csFinalReachingStates :: IS.IntSet
-         , csFinalStates :: IM.IntMap (Result re)
+         , _csFinalStates :: IM.IntMap (Result re)
          }
 
 type ConstructorM re a = S.State (ConstructorState re) a
@@ -152,7 +148,7 @@ makeDFA r = DFA transArray error final
     where
       init = CS M.empty 0 IM.empty IS.empty IM.empty
 
-      CS states next trans finalReaching final = execState (explore r (initState r)) init
+      CS _states next trans finalReaching final = execState (explore r (initState r)) init
 
       error = IS.fromList [ i | i <- [0..next-1], not (IS.member i finalReaching) ]
 

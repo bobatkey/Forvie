@@ -13,7 +13,7 @@ import           Data.Maybe (mapMaybe)
 import           Data.SExpr
 import           Data.DFA
 
--- turn the DFA into a collection of 'char-table's, one for each
+-- | Turn the DFA into a collection of 'char-table's, one for each
 -- state, plus a vector containing all these char-tables
 makeTransitionFunctionCharTables :: ShowSExpr a => String -> DFA Char a -> [SExpr]
 makeTransitionFunctionCharTables prefix dfa =

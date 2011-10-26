@@ -16,7 +16,7 @@
 -- The implementation is based on the implementation of sets of
 -- Unicode code points in cset.ml from Alain Frisch's ulex for
 -- OCaml. One difference is that because this implementation uses
--- instances of 'Bounded'to represent characters, it has to be more
+-- instances of 'Bounded' to represent characters, it has to be more
 -- careful about going off the end of the range.
 
 module Data.RangeSet
@@ -54,18 +54,14 @@ import qualified Data.Set as S
 import           Control.Monad (forM)
 import           Data.List (intercalate)
 import           Data.Maybe (fromJust)
-import           Data.String (IsString)
 import           Data.BooleanAlgebra
-import           Data.Functor
---import           Test.QuickCheck hiding (ranges)
-import           Data.Array hiding (assocs)
 
 -- | A subset of the given type. Stored as a list of ranges.
 newtype Set a = Set { unSet :: [(a,a)] }
     deriving (Eq,Ord)
 
-isNormalForm :: Ord a => Set a -> Bool
-isNormalForm (Set l) = check1 l
+_isNormalForm :: Ord a => Set a -> Bool
+_isNormalForm (Set l) = check1 l
     where
       check1 []        = True
       check1 ((a,b):l) = a <= b && check b l

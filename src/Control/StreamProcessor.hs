@@ -70,6 +70,7 @@ module Control.StreamProcessor
     , (>>|)
     , iterate
     , iterateUntil
+    , once
     )
     where
 

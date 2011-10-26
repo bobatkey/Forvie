@@ -27,9 +27,11 @@ import           Control.StreamProcessor (SR (..))
 import           Language.Forvie.Lexing.Spec
 import           Text.Lexeme
 
+highlightLexeme :: SyntaxHighlight tok => Lexeme tok -> H.Html
 highlightLexeme (Lexeme tok _ txt) =
     classOf tok $ H.toHtml txt
 
+classOf :: SyntaxHighlight tok => tok -> H.Html -> H.Html
 classOf tok =
     case lexicalClass tok of
       Comment     -> H.span ! A.class_ "comment"

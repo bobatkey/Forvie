@@ -24,7 +24,7 @@ module Language.Forvie.Lexing.Spec
       -- $example
       
       -- * Specification of Lexical Structure
-      LexicalSpecification (..)
+      LexicalSpecification
     , (:==>) (..)
       
     -- ** Exported Modules

@@ -4,18 +4,17 @@ module Language.Forvie.Util.Templater where
 
 import qualified Data.Map as M
 import Data.ByteString (ByteString)
-import Data.Text (Text, dropAround,pack)
+import Data.Text (Text, dropAround)
 import Data.Text.Encoding (encodeUtf8)
 import Control.StreamProcessor
-import Control.StreamProcessor.IO
 import Control.StreamProcessor.UTF8
 import Control.StreamProcessor.ByteString
-import Control.StreamProcessor.Binary
 import Language.Forvie.Lexing.Spec
 import Language.Forvie.Lexing.Generator
 
 data Token = Text | Variable deriving (Show, Eq, Ord)
 
+lexicalSpec :: CompiledLexSpec Token
 lexicalSpec = compileLexicalSpecification
     [ "$" .>>. oneOrMore (tok (interval 'A' 'Z' .|. interval 'a' 'z' .|. interval '0' '9')) .>>. "$"
       :==>
@@ -33,6 +32,7 @@ lexicalSpec = compileLexicalSpecification
 findVariables :: LexingError e => SP e Char (Lexeme Token)
 findVariables = lexerSP lexicalSpec
 
+stripName :: Text -> Text
 stripName = dropAround (=='$')
 
 doSubst :: M.Map Text Text

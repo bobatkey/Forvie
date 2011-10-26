@@ -10,7 +10,6 @@ module Language.Forvie.Layout
     )
     where
 
-import Control.Category ((>>>))
 import Language.Forvie.Lexing.Spec
 import Text.Lexeme
 import Text.Position
@@ -106,8 +105,6 @@ computeLayout :: (LayoutError e, Layout tok) =>
                  SP e (WithLayout tok) (Lexeme tok)
 computeLayout = go []
     where
-      -- FIXME: could be cleverer about these spans, computing sensible ones
-      -- from the ones in the input
       -- FIXME: why these strings?
       semicolonLexeme p = Lexeme semicolon p ";"
       lbraceLexeme p = Lexeme lbrace p "{"

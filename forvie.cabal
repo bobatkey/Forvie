@@ -45,6 +45,7 @@ Cabal-version:       >=1.2
 data-files:          elisp/mode-template.el
 
 Library
+  ghc-options:          -Wall -fno-warn-name-shadowing -fno-warn-unused-matches -fno-warn-orphans
   Hs-Source-Dirs:	src
   -- Modules exported by the library.
   Exposed-modules:    	Text.Lexeme,

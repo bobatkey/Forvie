@@ -63,8 +63,10 @@ instance Alternative (RHS nt tok v) where
     empty = RHS []
     RHS x <|> RHS y = RHS (x ++ y)
 
+list :: (Alternative f, Monad f) => f a -> f [a]
 list m = return [] <|> (:) <$> m <*> list m
 
+nonEmptyList :: (Alternative f, Monad f) => f a -> f [a]
 nonEmptyList p = (:) <$> p <*> list p
 
 
@@ -80,6 +82,8 @@ atLevel l rhs l' () = if l == l' then rhs else RHS []
 callAt :: nt () b -> Int -> RHS nt tok v (v b)
 callAt nt l = RHS [WfCall False (Call nt () l) $ \v -> RHS [Accept v]]
 
+callTop :: forall (nt :: * -> * -> *) b tok (v :: * -> *).
+           nt () b -> RHS nt tok v (v b)
 callTop nt = callAt nt 4
 
 call :: nt () b -> RHS nt tok v (v b)

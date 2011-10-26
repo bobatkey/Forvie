@@ -8,7 +8,7 @@ import           Paths_forvie
 import           System.IO
 import           Data.SExpr
 import           Text.PrettyPrint (render)
-import           Data.DFA.Elisp (makeTransitionFunction, makeTransitionFunctionCharTables)
+import           Data.DFA.Elisp (makeTransitionFunctionCharTables)
 import           Language.Forvie.Lexing.Spec
 import           Language.Forvie.Util.Templater
 
@@ -37,6 +37,19 @@ generateElisp name =
 --  (b) getting the mode-template.el and replacing everything with the modename and the fileregexp
 --  (c) outputting the lot somewhere
 
+-- | Generate the Emacs lisp code for a simple emacs major mode based
+-- on the provided lexical specification.
+--
+-- The Emacs lisp code is sent to `stdout`.
+--
+-- The generated major mode has the following features:
+-- 
+-- * Accurate syntax highlighting based on the lexical specification
+generateEmacsMode :: SyntaxHighlight tok =>
+                     CompiledLexSpec tok -- ^ Lexical specification to be used for syntax highlighting
+                  -> T.Text              -- ^ The name for this mode, used to prefix all the generated elisp functions
+                  -> T.Text              -- ^ An emacs-style regular expression for filenames where this mode should be used
+                  -> IO ()               -- ^ `IO` action that emits Elisp code to `stdout`
 generateEmacsMode lexSpec modename fileregexp =
     do templateFilename <- getDataFileName "elisp/mode-template.el"
        mapM_ (putStrLn . render . pprint) (generateElisp (T.unpack modename) lexSpec)
