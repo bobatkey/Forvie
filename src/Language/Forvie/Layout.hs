@@ -10,11 +10,13 @@ module Language.Forvie.Layout
     )
     where
 
-import Language.Forvie.Lexing.Spec
-import Text.Lexeme
-import Text.Position
-import Control.StreamProcessor
-import Language.Haskell.TH.Syntax
+import           Control.Monad.Error (MonadError (..))
+import           Language.Forvie.Lexing.Spec (SyntaxHighlight (..), Classification (..))
+import           Text.Lexeme
+import           Text.Position
+import           Data.MonadicStream
+import           Language.Haskell.TH.Syntax
+import qualified Data.Set as S
 
 -- Do an implementation of layout as per the Haskell standard:
 --  http://www.haskell.org/onlinereport/syntax-iso.html
@@ -46,22 +48,26 @@ instance SyntaxHighlight tok => SyntaxHighlight (NewlineOr tok) where
     lexicalClass Newline   = Whitespace
 
 --------------------------------------------------------------------------------
-class Eq tok => Layout tok where
+class Ord tok => Layout tok where
     lbrace      :: tok
     rbrace      :: tok
     semicolon   :: tok
-    blockOpener :: tok -> Bool
+    blockOpener :: S.Set tok
+
+isBlockOpener :: (Ord tok, Layout tok) => tok -> Bool
+isBlockOpener tok = S.member tok blockOpener
 
 --------------------------------------------------------------------------------
 data WithLayout a
     = LLexeme     (Lexeme a)
     | IndentCurly Span Int
     | IndentAngle Span Int
-      deriving (Show, Eq, Ord)
 
+{-
 -- takes a stream of lexemes with explicit newlines, and outputs a
 -- stream without newlines, but with layout directives
-insertLayout :: Layout tok => SP e (Lexeme (NewlineOr tok)) (WithLayout tok)
+insertLayout :: (Layout tok, Ord tok) =>
+                SP e (Lexeme (NewlineOr tok)) (WithLayout tok)
 insertLayout = afterBlockOpen
     where
       eos = {- Put (IndentCurly 0) -} EOS
@@ -72,7 +78,7 @@ insertLayout = afterBlockOpen
             go' (Just (Lexeme Newline _ _))  = afterNewline
             go' (Just (Lexeme (Token t) p s))
                 = Put (LLexeme (Lexeme t p s)) $
-                  if blockOpener t then afterBlockOpen else go
+                  if isBlockOpener t then afterBlockOpen else go
 
       afterBlockOpen = Get afterBlockOpen'
           where
@@ -84,7 +90,7 @@ insertLayout = afterBlockOpen
                   else
                       Put (IndentCurly p (posColumnNum (regionLeft p) + 1)) $
                       Put (LLexeme (Lexeme t p s)) $
-                      if blockOpener t then afterBlockOpen else go
+                      if isBlockOpener t then afterBlockOpen else go
 
       afterNewline = Get afterNewline'
           where
@@ -93,22 +99,108 @@ insertLayout = afterBlockOpen
             afterNewline' (Just (Lexeme (Token t) p s))
                 = Put (IndentAngle p (posColumnNum (regionLeft p) + 1)) $
                   Put (LLexeme (Lexeme t p s)) $
-                  if blockOpener t then afterBlockOpen else go
+                  if isBlockOpener t then afterBlockOpen else go
+-}
 
+{------------------------------------------------------------------------------}
+data LayoutState
+    = Normal
+    | AfterBlockOpen
+    | AfterNewline
+
+-- FIXME: the positions are probably all wrong.
+-- Probably want a zero-width span at the left of the region identified
+
+layoutHelper :: (Ord tok, Layout tok) =>
+                LayoutState
+             -> Lexeme (NewlineOr tok)
+             -> (LayoutState, [WithLayout tok])
+layoutHelper Normal         (Lexeme Newline   _ _) = (AfterNewline, [])
+layoutHelper Normal         (Lexeme (Token t) p s) =
+    ( if isBlockOpener t then AfterBlockOpen else Normal
+    , [LLexeme (Lexeme t p s)] )
+layoutHelper AfterBlockOpen (Lexeme Newline   _ _) = (AfterBlockOpen, [])
+layoutHelper AfterBlockOpen (Lexeme (Token t) p s) =
+    if t == lbrace then
+        (Normal, [LLexeme (Lexeme t p s)])
+    else
+        ( if isBlockOpener t then AfterBlockOpen else Normal
+        , [ IndentCurly p (posColumnNum (regionLeft p) + 1)
+          , LLexeme (Lexeme t p s) ] )
+layoutHelper AfterNewline   (Lexeme Newline   _ _) = (AfterNewline, [])
+layoutHelper AfterNewline   (Lexeme (Token t) p s) =
+    ( if isBlockOpener t then AfterBlockOpen else Normal
+    , [ IndentAngle p (posColumnNum (regionLeft p) + 1)
+      , LLexeme (Lexeme t p s) ] )
+
+insertLayout :: (Layout tok, Ord tok, Monad m) =>
+                Processor (Lexeme (NewlineOr tok)) m (WithLayout tok)
+insertLayout = concatMapAccum layoutHelper (const []) AfterBlockOpen
+
+{------------------------------------------------------------------------------}
 class LayoutError e where
     layoutError :: Span -> e
 
 instance LayoutError String where
     layoutError s = "Layout Error"
 
+semicolonLexeme, lbraceLexeme, rbraceLexeme :: Layout tok => Span -> Lexeme tok
+semicolonLexeme p = Lexeme semicolon p ";"
+lbraceLexeme p = Lexeme lbrace p "{"
+rbraceLexeme p = Lexeme rbrace p "}"
+
+prependLexeme :: Lexeme tok
+              -> ([Int], [Lexeme tok])
+              -> ([Int], [Lexeme tok])
+prependLexeme l (ms,ls) = (ms,l:ls)
+
+computeLayoutHelper :: (Layout tok, Monad m, MonadError e m, LayoutError e) =>
+                       [Int]
+                    -> WithLayout tok
+                    -> m ([Int], [Lexeme tok])
+computeLayoutHelper ms (IndentAngle p n) =
+    case ms of
+      (m:ms) | m == n -> return ( m:ms, [semicolonLexeme p] )
+             | n < n  -> do r <- computeLayoutHelper ms (IndentAngle p n)
+                            return (prependLexeme (rbraceLexeme p) r)
+      ms              -> return ( ms, [] )
+computeLayoutHelper ms (IndentCurly p n) =
+    case ms of
+      (m:ms) | n > m  -> return ( n:m:ms, [lbraceLexeme p] )
+      []     | n > 0  -> return ( [n],    [lbraceLexeme p] )
+      ms              -> do r <- computeLayoutHelper ms (IndentAngle p n)
+                            return (prependLexeme (lbraceLexeme p) $ prependLexeme (rbraceLexeme p) r)
+computeLayoutHelper (0:ms) (LLexeme l)
+    | lexemeTok l == rbrace = return ( ms, [l] )
+computeLayoutHelper ms     (LLexeme l)
+    | lexemeTok l == rbrace = throwError $ layoutError (lexemePos l)
+    | lexemeTok l == lbrace = return ( 0:ms, [l] )
+    | otherwise             = return ( ms, [l] )
+
+computeLayoutEOS :: (Layout tok, Monad m) =>
+                    [Int]
+                 -> m [Lexeme tok]
+computeLayoutEOS []     = return []
+computeLayoutEOS (m:ms) = do
+  r <- computeLayoutEOS ms
+  let l = rbraceLexeme (Span initPos initPos)
+  return (l:r)
+
+computeLayout :: (Layout tok, Monad m, MonadError e m, LayoutError e) =>
+                 Processor (WithLayout tok) m (Lexeme tok)
+computeLayout = concatMapAccumM computeLayoutHelper computeLayoutEOS []
+
+{------------------------------------------------------------------------------}
+layout :: (Layout tok, Monad m, MonadError e m, LayoutError e) =>
+          Processor (Lexeme (NewlineOr tok)) m (Lexeme tok)
+layout = insertLayout >>> computeLayout
+
+{-
 computeLayout :: (LayoutError e, Layout tok) =>
                  SP e (WithLayout tok) (Lexeme tok)
 computeLayout = go []
     where
       -- FIXME: why these strings?
-      semicolonLexeme p = Lexeme semicolon p ";"
-      lbraceLexeme p = Lexeme lbrace p "{"
-      rbraceLexeme p = Lexeme rbrace p "}"
 
       go stack = Get $ go' stack
           where
@@ -135,6 +227,7 @@ computeLayout = go []
             go' (m:ms) Nothing
                 = Put (rbraceLexeme (Span initPos initPos)) $ go' ms Nothing -- FIXME: location should be 'at end of input'
 
-layout :: (LayoutError e, Layout tok) =>
+layout :: (LayoutError e, Layout tok, Ord tok) =>
           SP e (Lexeme (NewlineOr tok)) (Lexeme tok)
 layout = insertLayout >>> computeLayout
+-}

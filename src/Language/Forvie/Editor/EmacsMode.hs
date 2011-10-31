@@ -5,38 +5,33 @@ module Language.Forvie.Editor.EmacsMode
     where
 
 import           Paths_forvie
-import           System.IO
-import           Data.SExpr
+import           System.IO (stdout)
+import           Data.SExpr (SExpr (..), pprint)
 import           Text.PrettyPrint (render)
 import           Data.DFA.Elisp (makeTransitionFunctionCharTables)
-import           Language.Forvie.Lexing.Spec
+import           Language.Forvie.Lexing.Spec (CompiledLexSpec (..), Classification (..), SyntaxHighlight (..))
 import           Language.Forvie.Util.Templater
-
-import           Control.StreamProcessor.IO
+import qualified Data.ByteString as B
 import qualified Data.Text as T
+import qualified Data.Text.Encoding as TE
 
-instance ShowSExpr Classification where
-    showSExpr Comment     = Atom "'comment"
-    showSExpr Keyword     = Atom "'keyword"
-    showSExpr Identifier  = Atom "'identifier"
-    showSExpr Punctuation = Atom "'punctuation"
-    showSExpr Whitespace  = Atom "'whitespace"
-    showSExpr Constant    = Atom "'constant"
-    showSExpr Operator    = Atom "'operator"
-    showSExpr Constructor = Atom "'constructor"
-    showSExpr Type        = Atom "'type"
+toFace :: Classification -> SExpr
+toFace Comment     = Atom "'comment"
+toFace Keyword     = Atom "'keyword"
+toFace Identifier  = Atom "'identifier"
+toFace Punctuation = Atom "'punctuation"
+toFace Whitespace  = Atom "'whitespace"
+toFace Constant    = Atom "'constant"
+toFace Operator    = Atom "'operator"
+toFace Constructor = Atom "'constructor"
+toFace Type        = Atom "'type"
 
 generateElisp :: SyntaxHighlight tok =>
                  String ->
                  CompiledLexSpec tok ->
                  [SExpr]
 generateElisp name =
-    makeTransitionFunctionCharTables name . fmap lexicalClass . lexSpecDFA
-
--- plan: generate an emacs mode by
---  (a) making the transition function code
---  (b) getting the mode-template.el and replacing everything with the modename and the fileregexp
---  (c) outputting the lot somewhere
+    makeTransitionFunctionCharTables name . fmap (toFace . lexicalClass) . lexSpecDFA
 
 -- | Generate the Emacs lisp code for a simple emacs major mode based
 -- on the provided lexical specification.
@@ -52,13 +47,12 @@ generateEmacsMode :: SyntaxHighlight tok =>
                   -> T.Text              -- ^ An emacs-style regular expression for filenames where this mode should be used
                   -> IO ()               -- ^ `IO` action that emits Elisp code to `stdout`
 generateEmacsMode lexSpec modename fileregexp =
-    do templateFilename <- getDataFileName "elisp/mode-template.el"
-       mapM_ (putStrLn . render . pprint) (generateElisp (T.unpack modename) lexSpec)
-       result <- onFiles templateFilename 8192 $ applyVariableSubstitution subst
-       case result of
-         Nothing    -> return ()
-         Just error -> hPutStrLn stderr $ "Error: " ++ error
+    do mapM_ (putStrLn . render . pprint) (generateElisp (T.unpack modename) lexSpec)
+       templateFilename <- getDataFileName "elisp/mode-template.el"
+       template <- B.readFile templateFilename
+       B.hPut stdout (applyVariableSubstitution subst template)
     where
-      subst = [ ("modename",   modename)
-              , ("fileregexp", fileregexp)
+      subst :: [(B.ByteString, B.ByteString)]
+      subst = [ (TE.encodeUtf8 "modename",   TE.encodeUtf8 modename)
+              , (TE.encodeUtf8 "fileregexp", TE.encodeUtf8 fileregexp)
               ]

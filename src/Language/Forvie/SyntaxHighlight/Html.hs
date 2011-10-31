@@ -16,14 +16,13 @@ module Language.Forvie.SyntaxHighlight.Html
     ( generateHtml )
     where
 
+import           Prelude hiding (foldl)
+import           Data.Functor ((<$>))
 import           Data.Monoid
-
 import           Text.Blaze.Html5 ((!))
 import qualified Text.Blaze.Html5 as H
 import qualified Text.Blaze.Html5.Attributes as A
-
-import           Control.StreamProcessor (SR (..))
-
+import           Data.MonadicStream (Reader, foldl)
 import           Language.Forvie.Lexing.Spec
 import           Text.Lexeme
 
@@ -66,11 +65,7 @@ classOf tok =
 --    ['Type'] becomes @type@.
 --
 -- The entire output is then wrapped in a @\<pre\>@ tag.
-generateHtml :: SyntaxHighlight tok => SR e (Lexeme tok) H.Html
-generateHtml = reader mempty
-    where
-      reader document = Read f
-          where
-            f Nothing       = Yield (H.pre document)
-            f (Just lexeme) = reader (document `mappend` highlightLexeme lexeme)
-
+generateHtml :: (SyntaxHighlight tok, Monad m) =>
+                Reader (Lexeme tok) m H.Html
+generateHtml =
+    H.pre <$> foldl (\doc lexeme -> doc `mappend` highlightLexeme lexeme) mempty

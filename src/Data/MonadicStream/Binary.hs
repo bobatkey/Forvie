@@ -1,0 +1,34 @@
+-- |
+-- Module         : Data.MonadicStream.Binary
+-- Copyright      : Robert Atkey 2011
+-- License        : BSD3
+--
+-- Maintainer     : Robert.Atkey@cis.strath.ac.uk
+-- Stability      : experimental
+-- Portability    : unknown
+--
+-- Monadic Streams and binary stuff.
+
+module Data.MonadicStream.Binary
+    ( ofByteString
+    , toWord8
+    , word8
+    )
+    where
+
+import           Prelude hiding (concatMap, head)
+import           Data.MonadicStream
+import qualified Data.ByteString as B
+import           Data.Word
+
+ofByteString :: Monad m => B.ByteString -> Stream m Word8
+ofByteString = ofList . B.unpack
+
+toWord8 :: Monad m => Processor B.ByteString m Word8
+toWord8 = concatMap B.unpack
+
+word8 :: Monad m => Reader Word8 m Word8
+word8 = do w <- head
+           case w of
+             Nothing -> fail "Unexpected EOS" -- FIXME: proper error
+             Just w  -> return w

@@ -27,6 +27,9 @@ data SExpr = Atom     String
            | IntConst Int
            | SExpr    [SExpr]
 
+instance ShowSExpr SExpr where
+    showSExpr = id
+
 cond :: [(SExpr, SExpr)] -> SExpr
 cond clauses = SExpr (Atom "cond" : map (\(t,e) -> SExpr [ t, e]) clauses)
 

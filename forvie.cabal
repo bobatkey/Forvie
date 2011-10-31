@@ -51,28 +51,23 @@ Library
   Exposed-modules:    	Text.Lexeme,
                         Text.Position,
                         Language.Forvie.Lexing.Spec,
-                        Language.Forvie.Lexing.Generator,
+                        Language.Forvie.Lexing.Text,
+                        Language.Forvie.Lexing.ByteString,
+                        Language.Forvie.Lexing.Error,
                         Language.Forvie.Editor.EmacsMode,
-                        Language.Forvie.Parsing.Grammar,
-                        Language.Forvie.Parsing.EarleyParser,
                         Language.Forvie.SyntaxHighlight.Html,
                         Language.Forvie.Layout,
                         Data.CharSet,
                         Data.BooleanAlgebra,
                         Data.RangeSet,
-                        Data.Knot,
                         Data.DFA,
                         Data.DFA.TH,
                         Data.DFA.Elisp,
                         Data.Regexp,
-                        Data.SExpr,
-                        Data.Type.Eq,
-                        Data.Type.Show,
-                        Control.StreamProcessor,
-                        Control.StreamProcessor.ByteString,
-                        Control.StreamProcessor.UTF8,
-                        Control.StreamProcessor.Binary,
-                        Control.StreamProcessor.IO
+                        Data.MonadicStream,
+                        Data.MonadicStream.IO,
+                        Data.MonadicStream.Binary,
+                        Data.SExpr
 
   -- Packages needed in order to build this package.
   Build-depends:     	template-haskell >= 2.5.0.0,
@@ -81,17 +76,12 @@ Library
                         containers >= 0.3.0.0,
                         text >= 0.11.0.8,
                         mtl >= 2.0.1.0,
+                        transformers >= 0.2.2.0,
                         bytestring >= 0.9.1.10,
                         pretty >= 1.0.1.1,
-                        blaze-html >= 0.4.1.1,
-                        type-equality >= 0.1.0
-  
+                        blaze-html >= 0.4.1.1
+
   -- Modules not exported by this package.
-  Other-modules:        Control.StreamProcessor.Rewindable,
-                        Control.StreamProcessor.Positions,
-                        Language.Forvie.Util.Templater,
-                        Paths_forvie
-  
-  -- Extra tools (e.g. alex, hsc2hs, ...) needed to build the source.
-  -- Build-tools:         
+  Other-modules:        Paths_forvie,
+                        Language.Forvie.Util.Templater
   
