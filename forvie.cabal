@@ -53,7 +53,6 @@ Library
                         Language.Forvie.Lexing.Spec,
                         Language.Forvie.Lexing.Text,
                         Language.Forvie.Lexing.ByteString,
-                        Language.Forvie.Lexing.Error,
                         Language.Forvie.Editor.EmacsMode,
                         Language.Forvie.SyntaxHighlight.Html,
                         Language.Forvie.Layout,

@@ -1,6 +1,6 @@
 module Language.Forvie.Util.Templater where
 
-import           Prelude hiding (foldl)
+import           Prelude hiding (foldl, lex)
 import           Control.Monad.Identity (runIdentity)
 import           Data.Monoid (mempty, mappend)
 import           Data.Char (ord)
@@ -9,7 +9,7 @@ import qualified Data.Map as M
 import qualified Data.RangeSet as RS
 import qualified Data.DFA as DFA
 import qualified Data.ByteString as B
-import           Data.MonadicStream
+import           Data.MonadicStream ((|>|), foldl)
 import           Language.Forvie.Lexing.Spec
 import           Language.Forvie.Lexing.ByteString
 
@@ -41,13 +41,12 @@ dropDollars :: B.ByteString -> B.ByteString
 dropDollars =
     B.takeWhile (/=dollar) . B.dropWhile (==dollar)
 
--- FIXME: more customisable error correction in lexers
--- FIXME: implement composition of streams with processors
+-- FIXME: use blaze-builder to generate a lazy bytestring
 applyVariableSubstitution :: [(B.ByteString, B.ByteString)]
                           -> B.ByteString
                           -> B.ByteString
 applyVariableSubstitution substitution input =
-    runIdentity (lexer dfa (OnError $ return Text) input |>| foldl processChunk mempty)
+    runIdentity (lex dfa (OnError $ return Text) input |>| foldl processChunk mempty)
     where
       substMap = M.fromList substitution
 

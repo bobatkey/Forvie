@@ -11,12 +11,13 @@
 -- lexemes, according to some lexical specification.
 
 module Language.Forvie.Lexing.ByteString
-    ( lexer
+    ( lex
     , ErrorHandler (..) )
     where
 
+import           Prelude hiding (lex)
 import           Data.MonadicStream (Stream (..), StreamStep (..))
-import           Data.Word
+import           Data.Word (Word8)
 import qualified Data.DFA as DFA
 import qualified Data.ByteString as B
 import qualified Data.ByteString.Unsafe as BU
@@ -42,12 +43,12 @@ initLexeme pos = CurrentLexeme pos 0 NoMatch
 
 newtype ErrorHandler m tok = OnError { onError :: m tok }
 
-lexer :: (Ord tok, Monad m) =>
-         DFA.DFA Word8 tok
-      -> ErrorHandler m tok
-      -> B.ByteString
-      -> Stream m (tok, B.ByteString)
-lexer dfa errorHandler string = go 0
+lex :: (Ord tok, Monad m) =>
+       DFA.DFA Word8 tok
+    -> ErrorHandler m tok
+    -> B.ByteString
+    -> Stream m (tok, B.ByteString)
+lex dfa errorHandler string = go 0
     where
       length = B.length string
 
