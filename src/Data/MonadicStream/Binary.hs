@@ -11,6 +11,7 @@
 
 module Data.MonadicStream.Binary
     ( ofByteString
+    , ofLazyByteString
     , toWord8
     , word8
     )
@@ -19,10 +20,14 @@ module Data.MonadicStream.Binary
 import           Prelude hiding (concatMap, head)
 import           Data.MonadicStream
 import qualified Data.ByteString as B
+import qualified Data.ByteString.Lazy as BL
 import           Data.Word
 
 ofByteString :: Monad m => B.ByteString -> Stream m Word8
 ofByteString = ofList . B.unpack
+
+ofLazyByteString :: Monad m => BL.ByteString -> Stream m Word8
+ofLazyByteString = ofList . BL.unpack
 
 toWord8 :: Monad m => Processor B.ByteString m Word8
 toWord8 = concatMap B.unpack
