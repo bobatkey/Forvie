@@ -12,7 +12,7 @@
 module Data.MonadicStream.Binary
     ( ofByteString
     , ofLazyByteString
-    , toWord8
+    , unpack
     , word8
     )
     where
@@ -29,8 +29,9 @@ ofByteString = ofList . B.unpack
 ofLazyByteString :: Monad m => BL.ByteString -> Stream m Word8
 ofLazyByteString = ofList . BL.unpack
 
-toWord8 :: Monad m => Processor B.ByteString m Word8
-toWord8 = concatMap B.unpack
+-- FIXME: probably faster ways of writing this
+unpack :: Monad m => Processor B.ByteString m Word8
+unpack = concatMap B.unpack
 
 word8 :: Monad m => Reader Word8 m Word8
 word8 = do w <- head
