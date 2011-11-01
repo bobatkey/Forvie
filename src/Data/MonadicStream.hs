@@ -41,6 +41,7 @@ module Data.MonadicStream
     , (|>|)
     , (>>|)
     , (>>>)
+    , (|>>)
     )
     where
 
@@ -313,3 +314,22 @@ processor1 >>> processor2 =
             return (ReadEnd (ProcessorEmit c (processor1 >>> processor2')))
         ReadEnd ProcessorEnd ->
             return (ReadEnd ProcessorEnd)
+
+-- | Post-compose a processor on to a stream. The resulting process is
+-- driven by the processor.
+(|>>) :: Monad m => Stream m a -> Processor a m b -> Stream m b
+stream |>> processor =
+  Stream $ do
+    readerStep <- forceReader $ processorReader processor
+    case readerStep of
+      Read k ->
+          do streamStep <- forceStream stream
+             case streamStep of
+               StreamElem a stream' ->
+                   forceStream (stream' |>> Processor (k (Just a)))
+               StreamEnd ->
+                   forceStream (nil     |>> Processor (k Nothing))
+      ReadEnd (ProcessorEmit b processor') ->
+          return (StreamElem b (stream |>> processor'))
+      ReadEnd ProcessorEnd ->
+          return StreamEnd
