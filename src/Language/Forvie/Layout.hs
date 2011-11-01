@@ -158,13 +158,13 @@ computeLayoutHelper :: (Layout tok, Monad m, MonadError e m, LayoutError e) =>
                        [Int]
                     -> WithLayout tok
                     -> m ([Int], [Lexeme tok])
-computeLayoutHelper ms (IndentAngle p n) =
+computeLayoutHelper ms     (IndentAngle p n) =
     case ms of
       (m:ms) | m == n -> return ( m:ms, [semicolonLexeme p] )
-             | n < n  -> do r <- computeLayoutHelper ms (IndentAngle p n)
+             | n < m  -> do r <- computeLayoutHelper ms (IndentAngle p n)
                             return (prependLexeme (rbraceLexeme p) r)
       ms              -> return ( ms, [] )
-computeLayoutHelper ms (IndentCurly p n) =
+computeLayoutHelper ms     (IndentCurly p n) =
     case ms of
       (m:ms) | n > m  -> return ( n:m:ms, [lbraceLexeme p] )
       []     | n > 0  -> return ( [n],    [lbraceLexeme p] )
@@ -183,7 +183,7 @@ computeLayoutEOS :: (Layout tok, Monad m) =>
 computeLayoutEOS []     = return []
 computeLayoutEOS (m:ms) = do
   r <- computeLayoutEOS ms
-  let l = rbraceLexeme (Span initPos initPos)
+  let l = rbraceLexeme (Span initPos initPos) -- FIXME: better position
   return (l:r)
 
 computeLayout :: (Layout tok, Monad m, MonadError e m, LayoutError e) =>
