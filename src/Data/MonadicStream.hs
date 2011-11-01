@@ -18,6 +18,7 @@ module Data.MonadicStream
     , append
     , concat
     , generate
+    , zip
     , ofList
 
     , Reader (..), ReaderStep (..)
@@ -45,9 +46,9 @@ module Data.MonadicStream
     )
     where
 
-import           Prelude hiding (head, map, filter, mapM, mapM_, concat, concatMap, foldl)
+import           Prelude hiding (head, map, filter, mapM, mapM_, concat, concatMap, foldl, zip)
 import qualified Data.List as L
-import           Control.Applicative (Applicative (..), liftA)
+import           Control.Applicative (Applicative (..), liftA, (<$>))
 import           Control.Monad (ap)
 import           Control.Monad.Trans (MonadTrans (..), MonadIO (..))
 
@@ -82,7 +83,6 @@ append xs ys = Stream $ do
 concat :: Monad m => [Stream m a] -> Stream m a
 concat streams = L.foldl append nil streams
 
--- scan?
 generate :: Monad m => m (Maybe a) -> Stream m a
 generate generator =
     Stream $ do
@@ -90,6 +90,21 @@ generate generator =
       case value of
         Nothing -> return StreamEnd
         Just a  -> return (StreamElem a (generate generator))
+
+-- | Zips two streams together. The effects of the first stream are
+-- executed before the effects of the second stream. If the streams
+-- are of differing length, then the generated stream ends when the
+-- shorter one ends, and the remaining effects of the other stream are
+-- not executed.
+zip :: Monad m => Stream m a -> Stream m b -> Stream m (a,b)
+zip xs ys =
+    Stream $ do
+      xsStep <- forceStream xs
+      ysStep <- forceStream ys
+      case (xsStep, ysStep) of
+        (StreamElem x xs, StreamElem y ys) -> return (StreamElem (x,y) (zip xs ys))
+        (StreamEnd,       _)               -> return StreamEnd
+        (_,               StreamEnd)       -> return StreamEnd
 
 {------------------------------------------------------------------------------}
 -- | `Reader e a b` represents functions that read 'a's before
@@ -129,13 +144,7 @@ head :: Monad m => Reader a m (Maybe a)
 head = Reader $ return (Read $ \i -> Reader $ return (ReadEnd i))
 
 toList :: Monad m => Reader a m [a]
-toList = loop []
-    where
-      loop buffer = do
-        a <- head
-        case a of
-          Nothing -> return (reverse buffer)
-          Just a  -> loop (a:buffer)
+toList = reverse <$> foldl (\as a -> a:as) []
 
 foldl :: Monad m => (b -> a -> b) -> b -> Reader a m b
 foldl f b = do
