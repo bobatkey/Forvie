@@ -13,7 +13,7 @@ Version:             0.1
 Synopsis:            Some lexing and parsing tools
 
 -- A longer description of the package.
--- Description:         
+Description:         Some lexing and parsing tools
 
 -- The license under which the package is released.
 License:             BSD3
@@ -40,9 +40,15 @@ Build-type:          Simple
 -- Extra-source-files:  
 
 -- Constraint on the version of Cabal needed to build this package.
-Cabal-version:       >=1.2
+Cabal-version:       >=1.6
 
 data-files:          elisp/mode-template.el
+
+source-repository head
+   type:     git
+   location: https://github.com/bobatkey/forvie
+
+
 
 Library
   ghc-options:          -Wall -fno-warn-name-shadowing -fno-warn-unused-matches -fno-warn-orphans
@@ -66,6 +72,7 @@ Library
                         Data.MonadicStream,
                         Data.MonadicStream.IO,
                         Data.MonadicStream.Binary,
+                        Data.MonadicStream.Concurrent,
                         Data.SExpr
 
   -- Packages needed in order to build this package.

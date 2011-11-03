@@ -144,6 +144,7 @@ class LayoutError e where
 instance LayoutError String where
     layoutError s = "Layout Error"
 
+-- FIXME: why these strings?
 semicolonLexeme, lbraceLexeme, rbraceLexeme :: Layout tok => Span -> Lexeme tok
 semicolonLexeme p = Lexeme semicolon p ";"
 lbraceLexeme p = Lexeme lbrace p "{"

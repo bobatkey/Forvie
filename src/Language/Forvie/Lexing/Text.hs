@@ -60,6 +60,17 @@ initLexeme text = CurrentLexeme text 0 NoMatch
 data ErrorHandler m tok = OnError { onError :: Maybe (Char, Position) -> m tok }
 
 {------------------------------------------------------------------------------}
+{-
+data State tok
+    = BeforeLexeme !(PositionWith T.Text)
+    | InLexeme     !Int !(CurrentLexeme tok) !(PositionWith T.Text)
+
+step :: State tok -> m (Maybe (State tok, Lexeme tok))
+step (BeforeLexeme text) = undefined
+step (InLexeme q lexeme text) = undefined
+-}
+
+{------------------------------------------------------------------------------}
 lex :: (Ord tok, Monad m) =>
        CompiledLexSpec tok
     -> ErrorHandler m tok

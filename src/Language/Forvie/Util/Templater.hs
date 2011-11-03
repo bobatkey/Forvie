@@ -42,6 +42,7 @@ dropDollars =
     B.takeWhile (/=dollar) . B.dropWhile (==dollar)
 
 -- FIXME: use blaze-builder to generate a lazy bytestring
+-- or generate a stream of objects, and then use chunksTo
 applyVariableSubstitution :: [(B.ByteString, B.ByteString)]
                           -> B.ByteString
                           -> B.ByteString
@@ -57,51 +58,3 @@ applyVariableSubstitution substitution input =
             Just t  -> d `mappend` t
       processChunk d (Text,     s) =
           d `mappend` s
-
-{-
-alphaNum :: CharSet
-alphaNum = interval 'A' 'Z' .|. interval 'a' 'z' .|. interval '0' '9'
-
-lexicalSpec :: CompiledLexSpec Token
-lexicalSpec = compileLexicalSpecification
-    [ "$" .>>. oneOrMore (tok alphaNum) .>>. "$"   :==> Variable
-    , oneOrMore (tok (complement (singleton '$'))) :==> Text
-    , "$"                                          :==> Text
-    ]
-
-applySubstToLine :: M.Map Text Text
-           -> Text
-           -> Text
-applySubstToLine substitution text =
-    lexer lexicalSpec text |>| 
-
-
-applyVariableSubstitution :: [(Text,Text)] -> Processor Text m Text
-applyVariableSubstitution substitution =
-    mapM (applySubst $ M.fromList substitution)
-
-findVariables :: LexingError e => SP e Char (Lexeme Token)
-findVariables = lexerSP lexicalSpec
-
-stripName :: Text -> Text
-stripName = dropAround (=='$')
-
-doSubst :: M.Map Text Text
-        -> Lexeme Token
-        -> Text
-doSubst s (Lexeme Text     _ txt) = txt
-doSubst s (Lexeme Variable _ varname) =
-    case M.lookup (stripName varname) s of
-      Nothing -> varname
-      Just t  -> t
-
-applyVariableSubstitution :: (UTF8DecodeError e, LexingError e) =>
-                             [(Text, Text)]
-                          -> SP e ByteString ByteString
-applyVariableSubstitution subst =
-    toWord8 >>>
-    decodeUTF8 >>>
-    findVariables >>>
-    mapSP (doSubst $ M.fromList subst) >>>
-    mapSP encodeUtf8
--}
