@@ -2,6 +2,10 @@
 
 module Data.TypedMap where
 
+-- Move the stuff below elsewhere
+class Show1 f where
+    show1 :: f a -> String
+
 data Equal a b where
     Refl :: Equal a a
 
