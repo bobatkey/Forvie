@@ -1,16 +1,16 @@
-{-# LANGUAGE RankNTypes, GADTs, KindSignatures, MultiParamTypeClasses, FlexibleInstances, FlexibleContexts, TypeSynonymInstances, TypeFamilies, UndecidableInstances #-}
+{-# LANGUAGE RankNTypes, GADTs, KindSignatures, MultiParamTypeClasses, FlexibleInstances, FlexibleContexts, TypeSynonymInstances, TypeFamilies, UndecidableInstances, ScopedTypeVariables #-}
 
 module Language.Forvie.Parsing.Parser where
 
-import qualified Data.IntMap as IM
-import qualified Data.Set as S
 import           Data.Char
 import           Control.Monad (unless)
 import           Control.Monad.State
 import           Control.Monad.ST
 import           Data.STRef
+import           Data.IORef
 import           Data.TypedMap (Equal (..), Compare1 (..), Ord1 (..), Eq1 (..), P (..))
 import qualified Data.TypedMap as TM
+import qualified Data.TypedSet as TS
 
 -- TODO:
 -- - better data structures for storing (pos,nt)->a maps
@@ -99,7 +99,7 @@ grammar ExprList =
 
 -- What if you write:
 --   NT X $ \vx -> NT X $ \vy -> if vx == vy then Failure else (Pair vx vy)
--- What on earth does that mean? I think the paper precludes this using the parametricity constraint
+-- What on earth does that mean? I think the paper precludes this using the parametricity constraint. We would here too, since the grammar does not know that result nodes have decidable equality
 
 -- To give a semantics to tail-calls, I need to define what is going
 -- on for the generation of the type from a grammar. I think I need to
@@ -134,7 +134,6 @@ grammar (ExprList l) =
 --   let rhs  = grammar nt
 --       item = Item rhs returnAddress   --- the caller's returnAddress!
 --   execute item
-
 -- what if we have already done this? we could just have a table of
 -- tail calls that we have already made; containing the non-terminal
 -- invoked and the return address
@@ -148,140 +147,138 @@ pr (In (Paren e))   = "(" ++ pr e ++ ")"
 pr (In Emp)         = ""
 pr (In (Cons e es)) = pr e ++ pr es
 
-{-
-instance ParseResultsMonad f Maybe where
-    type ResultNode f Maybe = Knot f
-    newResult i j x = Just (In x)
-    addResult v x   = Nothing
--}
-
 data K a b = K a
 
--- This demonstrates that the parser does a lot of unnecessary work.
-{-
+{------------------------------------------------------------------------------}
+-- building actual imperative graphs of the parse results
+data STRN f s a = STRN (STRef s [f (STRN f s) a])
+
+instance ParseResultsMonad f (ST s) where
+    type ResultNode f (ST s) = STRN f s
+    newResult i j x      = do v <- newSTRef [x]; return (STRN v)
+    addResult (STRN v) x = modifySTRef v (x:)
+
+instance ParseStackMonad nt tok f (ST s) where
+    data StackNode nt tok f (ST s) t a = STSN (STRef s [WaitingForCall nt tok f (ST s) t a])
+    newStackNode a            = do v <- newSTRef [a]; return (STSN v)
+    addToStackNode a (STSN v) = modifySTRef v (a:)
+    readStackNode (STSN v)    = readSTRef v
+
+--------------------------------------------------
+-- This demonstrates that the parser does a lot of unnecessary work,
+-- and that tail call optimisation is desirable
 instance Show1 (f (K ())) => ParseResultsMonad f IO where
     type ResultNode f IO = K ()
     newResult i j x = do putStrLn $ "New result from " ++ show i ++ " to " ++ show j ++ ": " ++ show1 x
                          return (K ())
     addResult v x   = return ()
+
+{-
+instance ParseResultsMonad f IO where
+    type ResultNode f IO = Knot f
+    newResult i j x      = return (In x)
+    addResult _ x        = error "ambiguity detected"
 -}
-{------------------------------------------------------------------------------}
--- building actual imperative graphs of the parse results
-instance ParseResultsMonad f (ST s) where
-    data ResultNode f (ST s) a = STRN (STRef s [f (ResultNode f (ST s)) a])
-    newResult i j x      = do v <- newSTRef [x]; return (STRN v)
-    addResult (STRN v) x = modifySTRef v (x:)
 
-    data StackNode (ST s) a = STSN (STRef s [a])
-    newStackNode a            = do v <- newSTRef [a]; return (STSN v)
-    addToStackNode a (STSN v) = modifySTRef v (a:)
-    readStackNode (STSN v)    = readSTRef v
+instance Show1 (f (K ())) => ParseStackMonad nt tok f IO where
+    data StackNode nt tok f IO t a = IOSN (IORef [WaitingForCall nt tok f IO t a])
+    newStackNode a            = do v <- newIORef [a]; return (IOSN v)
+    addToStackNode a (IOSN v) = modifyIORef v (a:)
+    readStackNode (IOSN v)    = readIORef v
 
--- TODO: version with IORefs
+-- TODO: version with IORefs (is there a typeclass that covers IO/STRefs?)
 --       version that rejects ambiguity, but uses refs to store the waiting graph
 --       purely functional version (without GC), with different ambiguity rejection behaviour
---       add a 
+--       add an error reporting whotsit
 
 {------------------------------------------------------------------------------}
--- Step 2: Parsing (naively)
+-- oops: the top-level result type needs to be a parameter of the type
+-- class too.
+--newtype PMonad nt tok f a =
+--    PM (StateT (Waiting nt tok f t) Maybe a)
 
+-- Plan: use Maybe to report ambiguity errors
+--       use the normal state monad to do garbage collection
+
+-- Overall plan:
+-- - collect some grammars to test with
+--   - with and without tailcalls (or by translation from Kleene star)
+-- - collect benchmarks of different parsing strategies
+-- - 
+
+{------------------------------------------------------------------------------}
 -- TODO:
 -- - experiment with the CPS version to see whether it is faster
 -- - error reporting
 
 {----------------------------------------}
 class Monad m => ParseResultsMonad f m where
-    data ResultNode f m :: * -> *
+    type ResultNode f m :: * -> *
     newResult :: Int -> Int -> f (ResultNode f m) x -> m (ResultNode f m x)
     addResult :: ResultNode f m x -> f (ResultNode f m) x -> m ()
 
-    data StackNode m :: * -> *
-    newStackNode    :: a -> m (StackNode m a)
-    addToStackNode  :: a -> StackNode m a -> m ()
-    readStackNode   :: StackNode m a -> m [a]
+class ParseResultsMonad f m => ParseStackMonad nt tok f m where
+    data StackNode nt tok f m :: * -> * -> *
+    newStackNode    :: WaitingForCall nt tok f m t a -> m (StackNode nt tok f m t a)
+    addToStackNode  :: WaitingForCall nt tok f m t a -> StackNode nt tok f m t a -> m ()
+    readStackNode   :: StackNode nt tok f m t a -> m [WaitingForCall nt tok f m t a]
+
+data ReturnAddress nt tok f m t a where
+    TopLevel :: ReturnAddress nt tok f m t t
+    Previous :: Int -> nt a -> StackNode nt tok f m t a -> ReturnAddress nt tok f m t a
+
+data WaitingForCall nt tok f m t a where
+    WfCall :: (ResultNode f m a -> RHS nt tok (ResultNode f m) (f (ResultNode f m) b))
+           -> ReturnAddress nt tok f m t b
+           -> WaitingForCall nt tok f m t a
+
+data Item nt tok f m t where
+    Item :: RHS nt tok (ResultNode f m) (f (ResultNode f m) b)
+         -> ReturnAddress nt tok f m t b
+         -> Item nt tok f m t
 
 {----------------------------------------}
-parse :: (Ord1 nt, ParseResultsMonad f m) =>
+parse :: (Ord1 nt, ParseStackMonad nt tok f m) =>
          Grammar nt tok f
       -> nt a
       -> [tok]
       -> m (Maybe (ResultNode f m a))
 parse grammar nt input =
-    go [Item (grammar nt) TopLevel] IM.empty 0 input
+    go [Item (grammar nt) TopLevel] 0 input
     where
-      go items previous j [] = do
-        (_, _, complete) <- executeAll grammar Nothing j items previous
+      go items j [] = do
+        (_, complete) <- executeAll grammar Nothing j items
         return complete
-      go items previous j (tok:toks) = do
-        (previous', newItems, _) <- executeAll grammar (Just tok) j items previous
-        go newItems previous' (j+1) toks
+      go items j (tok:toks) = do
+        (newItems, _) <- executeAll grammar (Just tok) j items
+        go newItems (j+1) toks
 
 -- If newItems is empty (or only contains “Failure”), then we have
 -- encountered a parse error. Have a look at the 'items' list to
 -- derive a stack-trace of what went wrong. We can also tag “Failure”
 -- with an error-message to describe the fault.
 
-{----------------------------------------}
--- Auxillary data structures
-data ReturnAddress nt t b where
-    TopLevel :: ReturnAddress nt t t
-    Previous :: Int -> nt b -> ReturnAddress nt t b
-
-data Item nt tok f m t where
-    Item :: RHS nt tok (ResultNode f m) (f (ResultNode f m) b) ->
-            ReturnAddress nt t b ->
-            Item nt tok f m t
-
-data WaitingForCall nt tok f m t where
-    WfCall :: nt a
-           -> (ResultNode f m a -> RHS nt tok (ResultNode f m) (f (ResultNode f m) b))
-           -> ReturnAddress nt t b
-           -> WaitingForCall nt tok f m t
-
--- TODO: return addresses need to refer to StackNode f m (WaitingForCall nt tok f m t b)
---       how to lower the amount of circularity?
-
-type Waiting nt tok f m t =
-    IM.IntMap [WaitingForCall nt tok f m t]
-
-{--------------------}
--- Move this lot elsewhere (Data.TypedSet?)
-data SomeNT nt where
-    SomeNT :: nt a -> SomeNT nt
-
-instance Eq1 nt => Eq (SomeNT nt) where
-    SomeNT nt1 == SomeNT nt2 =
-        case nt1 === nt2 of Nothing -> False; Just _ -> True
-
-instance Ord1 nt => Ord (SomeNT nt) where
-    compare (SomeNT nt1) (SomeNT nt2) =
-        case compare1 nt1 nt2 of LT1 -> LT; EQ1 -> EQ; GT1 -> GT
+-- FIXME: Instead of distinguishing between TopLevel and Previous, we
+-- should just dump everything in "known" and fish out the complete
+-- parse results at the end by looking up (P 0 nt). This would require
+-- empty StackNodes, but would get rid of the 't's everywhere, and get
+-- rid of the ReturnAddress datatype.
 
 {----------------------------------------}
 data ParserState nt tok f m t
     = ParserState { known      :: TM.Map (P Int nt) (ResultNode f m)     -- ^ complete sub-parses ending at this point
-                  , complete   :: Maybe (ResultNode f m t)             -- ^ reference to the complete parses to this point
-                  , called     :: S.Set (SomeNT nt)       -- ^ calls that have been made here
-                  , waiting    :: Waiting nt tok f m t    -- ^ suspended items waiting for completion of a call
-                  , continuing :: [Item nt tok f m t]     -- ^ items that will continue to the next step
+                  , complete   :: Maybe (ResultNode f m t)               -- ^ reference to the complete parses to this point
+                  , called     :: TS.Set nt                              -- ^ calls that have been made here, used to prevent non-productive loops
+                  , waiting    :: TM.Map (P Int nt) (StackNode nt tok f m t)
+                  , continuing :: [Item nt tok f m t]                    -- ^ items that will continue to the next step
                   }
 
--- waiting :: TM.Map (P Int nt) (WaitingItems nt tok f v t)
-
--- so this describes a graph, which needs to be garbage collected
--- occasionally.
-
--- the executeAll function below essentially treats “waiting” as a
--- piece of state. So we should push it into the ParseResultsMonad,
--- and have two sorts of variables. The “waiting” field then becomes a
--- map of return addresses to references to suspended items.
-
-initState :: Waiting nt tok f m t -> ParserState nt tok f m t
-initState waitingSet =
+initState :: ParserState nt tok f m t
+initState =
     ParserState { known      = TM.empty
                 , complete   = Nothing
-                , called     = S.empty
-                , waiting    = waitingSet
+                , called     = TS.empty
+                , waiting    = TM.empty
                 , continuing = []
                 }
 
@@ -305,54 +302,63 @@ addKnown i nt v = modify $ \s -> s { known = TM.insert (P i nt) v (known s) }
 addContinuing :: Monad m => Item nt tok f m t -> M nt tok f t m ()
 addContinuing item = modify $ \s -> s { continuing = item : continuing s }
 
-addWaitingForCall :: Monad m => Int -> WaitingForCall nt tok f m t -> M nt tok f t m ()
-addWaitingForCall j wfcall = do
-  modify $ \s -> s { waiting = IM.alter (maybe (Just [wfcall]) (Just . (wfcall:))) j (waiting s) }
+addWaitingForCall :: (Eq1 nt, ParseStackMonad nt tok f m) =>
+                     Int
+                  -> nt a
+                  -> WaitingForCall nt tok f m t a
+                  -> M nt tok f t m (StackNode nt tok f m t a)
+addWaitingForCall j nt wfcall = do
+  maybeStackNode <- gets (TM.lookup (P j nt) . waiting)
+  case maybeStackNode of
+    Nothing -> do
+      stackNode <- lift $ newStackNode wfcall
+      modify $ \s -> s { waiting = TM.insert (P j nt) stackNode (waiting s) }
+      return stackNode
+    Just stackNode -> do
+      lift $ addToStackNode wfcall stackNode
+      return stackNode
 
-getWaiting :: (Eq1 nt, Monad m) => Int -> nt a -> ResultNode f m a -> M nt tok f t m [Item nt tok f m t]
-getWaiting i nt v = do
-  set <- gets (maybe [] id . IM.lookup i . waiting)
-  return (findNT set)
-    where
-      findNT [] = []
-      findNT (WfCall nt' k returnAddress:wfs) =
-          case nt === nt' of
-            Nothing   -> findNT wfs
-            Just Refl -> Item (k v) returnAddress : findNT wfs
+getWaiting :: ParseStackMonad nt tok f m =>
+              StackNode nt tok f m t a
+           -> ResultNode f m a
+           -> M nt tok f t m [Item nt tok f m t]
+getWaiting stackNode x = do
+  wfcalls <- lift $ readStackNode stackNode
+  return $ map create wfcalls
+      where create (WfCall k returnAddress) = Item (k x) returnAddress
 
 recordCall :: (Ord1 nt, Monad m) => nt a -> M nt tok f t m Bool
 recordCall nt = do
   beenCalled <- gets called
-  case SomeNT nt `S.member` beenCalled of
+  case nt `TS.member` beenCalled of
     True  -> return True
     False -> do
-      modify $ \s -> s { called = S.insert (SomeNT nt) (called s) }
+      modify $ \s -> s { called = TS.insert nt (called s) }
       return False
 
 {----------------------------------------}
-executeAll :: (Ord1 nt, ParseResultsMonad f m) =>
+executeAll :: (Ord1 nt, ParseStackMonad nt tok f m) =>
               Grammar nt tok f     -- ^ The grammar
            -> Maybe tok            -- ^ Current token
            -> Int                  -- ^ The current position
            -> [Item nt tok f m t]  -- ^ Items to be processed
-           -> Waiting nt tok f m t -- ^ Waiting items
-           -> m (Waiting nt tok f m t,
-                 [Item nt tok f m t],
+           -> m ([Item nt tok f m t],
                  Maybe (ResultNode f m t))      -- ^ The new waiting items set, the new items, and complete parses to this point
-executeAll grammar token j items previous = do
-  st <- execStateT (mapM_ execute items) (initState previous)
-  return (waiting st, continuing st, complete st)
+executeAll grammar token j items = do
+  st <- execStateT (mapM_ execute items) initState
+  return (continuing st, complete st)
     where
       execute (Item (Return a) TopLevel) = do
         addComplete j a
 
-      execute (Item (Return a) (Previous i nt)) = do
+      execute (Item (Return a) (Previous i nt stackNode)) = do
+        -- FIXME: get the position and non-terminal from the stackNode
         known <- checkKnown i nt
         case known of
           Nothing -> do
             v <- lift $ newResult i j a
             addKnown i nt v
-            mapM_ execute =<< getWaiting i nt v
+            mapM_ execute =<< getWaiting stackNode v
           Just v  -> do
             lift $ addResult v a
 
@@ -369,14 +375,14 @@ executeAll grammar token j items previous = do
           Just t  -> addContinuing (Item (k t) returnAddress)
 
       execute (Item (NT nt k) returnAddress) = do
-        addWaitingForCall j (WfCall nt k returnAddress)
+        stackNode <- addWaitingForCall j nt (WfCall k returnAddress)
         known <- checkKnown j nt
         case known of
           Just v  -> do
             execute (Item (k v) returnAddress)
           Nothing -> do
             alreadyCalled <- recordCall nt
-            unless alreadyCalled $ execute (Item (grammar nt) (Previous j nt))
+            unless alreadyCalled $ execute (Item (grammar nt) (Previous j nt stackNode))
 {-
       execute (Item (TailCall nt) returnAddress) = do
         alreadyCalled <- recordTailCall nt returnAddress
