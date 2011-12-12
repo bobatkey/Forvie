@@ -59,6 +59,11 @@ Library
                         Language.Forvie.Lexing.Spec,
                         Language.Forvie.Lexing.Text,
                         Language.Forvie.Lexing.ByteString,
+                        Language.Forvie.Grammar.ActiveRHS,
+                        Language.Forvie.Grammar.ContextFree,
+                        Language.Forvie.Parsing.Parser,
+                        Language.Forvie.Parsing.FGL,
+                        Language.Forvie.Parsing.ParseMonad,
                         Language.Forvie.Editor.EmacsMode,
                         Language.Forvie.SyntaxHighlight.Html,
                         Language.Forvie.Layout,
@@ -85,7 +90,9 @@ Library
                         transformers >= 0.2.2.0,
                         bytestring >= 0.9.1.10,
                         pretty >= 1.0.1.1,
-                        blaze-html >= 0.4.1.1
+                        blaze-html >= 0.4.1.1,
+                        graphviz >= 2999.12.0.3,
+                        fgl >= 5.4.2.3
 
   -- Modules not exported by this package.
   Other-modules:        Paths_forvie,

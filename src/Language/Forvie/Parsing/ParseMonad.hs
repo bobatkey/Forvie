@@ -4,11 +4,10 @@ module Language.Forvie.Parsing.ParseMonad
     where
 
 import Control.Monad.ST
+import Data.TypedMap (Show1 (..), Show2 (..))
 import Data.STRef
 import Data.IORef
 import Language.Forvie.Parsing.Parser
-
-import Data.TypedMap (Show1 (..))
 
 --------------------------------------------------------------------------------
 data Knot f a = In (f (Knot f) a)
@@ -56,7 +55,8 @@ instance (ParseResultsMonad f m, RefMonad m) => ParseStackMonad nt tok f m where
 data AmbiguityCheckResult f a where
     UnambiguousResult :: a -> AmbiguityCheckResult f a
     AmbiguityDetected :: Int -> Int -> f (PosKnot f) b -> f (PosKnot f) b -> AmbiguityCheckResult f a
-    -- and also parse failures
+    -- and also parse failures, where we would like to print out a
+    -- stack trace, or at least a list of things that failed.
 
 instance Functor (AmbiguityCheckResult f) where
     fmap f (UnambiguousResult a)       = UnambiguousResult (f a)

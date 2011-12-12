@@ -6,6 +6,9 @@ module Data.TypedMap where
 class Show1 f where
     show1 :: f a -> String
 
+class Show2 f where
+    show2 :: Show1 v => f v a -> String
+
 data Equal a b where
     Refl :: Equal a a
 
