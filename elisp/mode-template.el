@@ -13,10 +13,6 @@
 	((eq classification 'constructor) 'font-lock-constant-face)
         ((eq classification 'type)        'font-lock-type-face)))
 
-;; FIXME: replace 'org-unmodified' with 'with-slient-modifications'.
-;; See: http://stackoverflow.com/questions/2699857/emacs-how-to-intelligently-handle-buffer-modified-when-setting-text-properties
-(require 'org)
-
 ;; lexer state consists of:
 ;;   the start of the current lexeme
 ;;   the current state
@@ -34,7 +30,7 @@
   (setq $modename$-lexing-timer nil)
   (setq $modename$-lexing-underway t)
   (catch 'abort-lexing
-    (org-unmodified
+    (with-silent-modifications
      (let ((position       1)
 	   (final-position (+ (buffer-size) 1))
 	   (state          0)
