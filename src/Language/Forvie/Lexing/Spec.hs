@@ -65,9 +65,9 @@ data a :==> b = a :==> b
     deriving (Eq, Ord, Show)
 
 instance DFA.FiniteStateAcceptor r => DFA.FiniteStateAcceptor (r :==> a) where
-     type DFA.State (r :==> a)    = DFA.State r
-     type DFA.Alphabet (r :==> a) = DFA.Alphabet r
-     type DFA.Result (r :==> a)   = a
+     type State (r :==> a)    = DFA.State r
+     type Alphabet (r :==> a) = DFA.Alphabet r
+     type Result (r :==> a)   = a
      initState (r :==> a) = DFA.initState r
      advance (r :==> a) c s = DFA.advance r c s
      isAcceptingState (r :==> a) s = const a <$> DFA.isAcceptingState r s

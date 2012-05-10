@@ -1,6 +1,7 @@
 {-# LANGUAGE TemplateHaskell,
              OverloadedStrings,
-             TypeSynonymInstances #-}
+             TypeSynonymInstances,
+             FlexibleInstances #-}
 
 module Language.Forvie.Layout
     ( NewlineOr (..)

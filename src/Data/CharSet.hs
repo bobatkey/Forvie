@@ -34,14 +34,10 @@ module Data.CharSet
     where
 
 import Prelude hiding (null)
-import Data.String
 import Data.BooleanAlgebra
 import Data.RangeSet
 
 type CSet = Set Char
-
-instance IsString CSet where
-    fromString = foldl (.|.) zero . map singleton
 
 anyChar :: CSet
 anyChar = one
@@ -108,4 +104,4 @@ digit :: CSet
 digit = interval '0' '9'
 
 space :: CSet
-space = " \n\t"
+space = singleton ' ' .|. singleton '\n' .|. singleton '\t'

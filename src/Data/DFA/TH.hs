@@ -1,4 +1,4 @@
-{-# LANGUAGE TemplateHaskell #-}
+{-# LANGUAGE TemplateHaskell, ScopedTypeVariables #-}
 
 module Data.DFA.TH
     (makeTransitionFunction)
@@ -19,7 +19,7 @@ import           Language.Haskell.TH.Syntax
 -- input character. This will return the result as a
 -- "TransitionResult"
 
-makeTransitionFunction :: (Lift c, Lift a) => DFA c a -> ExpQ
+makeTransitionFunction :: forall c a. (Lift c, Lift a) => DFA c a -> ExpQ
 makeTransitionFunction (DFA transitions errorStates acceptingStates)
     = lamE [ varP state, varP c ]
            (caseE (varE state) (map mkMatch $ assocs transitions))
@@ -31,6 +31,7 @@ makeTransitionFunction (DFA transitions errorStates acceptingStates)
         c = mkName "c"
         state = mkName "state"
 
+        mkCharMatch :: (c, c, Q Exp) -> Q (Guard, Exp)
         mkCharMatch (low, high, res) = normalGE [| $(varE c) >= low && $(varE c) <= high |] res
 
         mkResult q =
