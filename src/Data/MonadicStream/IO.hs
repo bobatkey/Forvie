@@ -27,6 +27,7 @@ import           Prelude hiding (mapM_)
 import qualified Data.Text    as T
 import qualified Data.Text.IO as TIO
 import qualified Data.ByteString as B
+import qualified Data.ByteString.Char8 as B8
 import           Control.Monad.Trans (MonadIO (..))
 import           Data.MonadicStream
 import qualified System.IO as IO
@@ -92,5 +93,5 @@ byteStringLinesOf handle = generate g
 {-# INLINE byteStringLinesOf #-}
 
 byteStringLinesTo :: MonadIO m => IO.Handle -> Reader B.ByteString m ()
-byteStringLinesTo handle = mapM_ (liftIO . B.hPutStrLn handle)
+byteStringLinesTo handle = mapM_ (liftIO . B8.hPutStrLn handle)
 {-# INLINE byteStringLinesTo #-}
