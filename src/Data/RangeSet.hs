@@ -211,31 +211,3 @@ lookup (TotalMap mappings) a = go mappings
 
 assocs :: TotalMap a b -> [(Set a, b)]
 assocs (TotalMap mappings) = mappings
-
-
-      {-
-data Partition a b
-    = Partition { mapping :: Array Int b
-                , classes :: [(a,a,Int)]
-                }
-      deriving Show
-
-everywhere :: Bounded a => b -> Partition a b
-everywhere b
-    = Partition { mapping = array (0,0) [(0,b)]
-                , classes = [(minBound, maxBound, 0)]
-                }
-
-ifThenElse :: (Enum a, Ord a, Bounded a) => Set a -> b -> b -> Partition a b
-ifThenElse (Set ranges) t e =
-    Partition { mapping = array (0,1) [(0,t), (1,e)]
-              , classes = build minBound ranges
-              }
-    where
-      build x []        = if x == maxBound then [] else [(x,maxBound,1)]
-      build x ((i,j):r) = if x < i then (x,pred i,1):tail else tail
-          where tail = (i,j,0):if j == maxBound then [] else build (succ j) r
-
-intersectPartitions :: Partition a b -> Partition a b -> Partition a b
-intersectPartitions 
--}
