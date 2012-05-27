@@ -1,4 +1,4 @@
-{-# LANGUAGE OverloadedStrings, ScopedTypeVariables #-}
+{-# LANGUAGE OverloadedStrings, ScopedTypeVariables, TypeFamilies, FlexibleContexts, FlexibleInstances #-}
 
 module Main
     ( main )
@@ -6,14 +6,16 @@ module Main
 
 import           Prelude hiding (null)
 import           Data.Maybe (fromJust)
-import           Data.Functor ((<$>))
+import           Control.Applicative
 import           System.Random
 import           Test.Framework (Test, defaultMain, testGroup)
 import           Test.Framework.Providers.QuickCheck2 (testProperty)
-import           Test.QuickCheck hiding (ranges)
+import           Test.QuickCheck hiding (ranges, Result)
 
 import           Data.BooleanAlgebra
 import           Data.RangeSet
+import           Data.Regexp
+import           Data.DFA
 
 --------------------------------------------------------------------------------
 -- from http://www.cubiclemuses.com/cm/articles/2011/07/14/quickchecking-type-class-laws/
@@ -68,6 +70,49 @@ prop_representative s =
     (fromJust $ getRepresentative s) `memberOf` s
 
 --------------------------------------------------------------------------------
+{-
+compareFSAs :: ( FiniteStateAcceptor a
+               , FiniteStateAcceptor b
+               , Alphabet a ~ Alphabet b
+               , Result a ~ Result b
+               , Arbitrary (Alphabet a)
+               , Show (Alphabet a)
+               , Eq (Result a)) =>
+               a ->
+               b ->
+               Property
+compareFSAs a b = property $ \input -> runFiniteStateAcceptor a input == runFiniteStateAcceptor b input
+-}
+
+-- based on:
+-- https://github.com/sebfisch/haskell-regexp/blob/master/src/quickcheck.lhs
+instance Arbitrary (Regexp Char) where
+    arbitrary = sized regexp
+
+regexp :: Int -> Gen (Regexp Char)
+regexp 0 = frequency [ (1, return one)
+                     , (8, tok <$> (singleton <$> elements "abcdef"))
+                     ]
+regexp n = frequency [ (3, regexp 0)
+                     , (1, (.|.) <$> subexp <*> subexp)
+                     , (2, (.>>.) <$> subexp <*> subexp)
+                     , (1, zeroOrMore <$> regexp (n-1))
+                     ]
+    where subexp = regexp (n `div` 2)
+
+newtype RegexpInput = RegexpInput String
+    deriving Show
+
+instance Arbitrary RegexpInput where
+    arbitrary = RegexpInput <$> listOf1 (elements "abcdef")
+
+-- FIXME: problem with this is that it spends most of its not matching
+-- anything, so we only test part of the specification.
+prop_regexp :: Regexp Char -> RegexpInput -> Bool
+prop_regexp (r :: Regexp Char) (RegexpInput i) =
+    runFiniteStateAcceptor r i == runDFA (makeDFA r) i
+
+--------------------------------------------------------------------------------
 main :: IO ()
 main = defaultMain
     [ testGroup "Data.RangeSet"
@@ -77,4 +122,5 @@ main = defaultMain
       , testProperty "singleton"      (prop_singleton `asFunctionOf` (undefined :: Char))
       , testProperty "representative" (prop_representative `asFunctionOf` (undefined :: Set Char))
       ]
+    , testProperty "regexp" prop_regexp
     ]
