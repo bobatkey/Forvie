@@ -69,8 +69,8 @@ prop_representative s =
 
 --------------------------------------------------------------------------------
 main :: IO ()
-main = defaultMain 
-    [ testGroup "RangeSet"
+main = defaultMain
+    [ testGroup "Data.RangeSet"
       [ typeIndexedTest (test_BooleanAlgebra :: TypeIndexedTest (Set Char))
       , testProperty "interval"       (prop_interval `asFunctionOf` (undefined :: Char))
       , testProperty "ranges"         (prop_ranges `asFunctionOf` (undefined :: Set Char))
