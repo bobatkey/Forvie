@@ -33,7 +33,6 @@ module Data.CharSet
     , space)
     where
 
-import Prelude hiding (null)
 import Data.BooleanAlgebra
 import Data.RangeSet
 
