@@ -11,10 +11,11 @@ Category:            Text
 
 Build-type:          Simple
 
-Extra-source-files:  README.md
+Extra-source-files:  README.md,
+                     tests/Properties.hs
 
 -- Constraint on the version of Cabal needed to build this package.
-Cabal-version:       >=1.6
+Cabal-version:       >=1.8
 
 data-files:          elisp/mode-template.el
 
@@ -63,4 +64,16 @@ Library
   -- Modules not exported by this package.
   Other-modules:        Paths_forvie,
                         Language.Forvie.Util.Templater
-  
+
+Test-suite tests
+  Type:                 exitcode-stdio-1.0
+  Hs-source-dirs:       tests
+  Main-is:              Properties.hs
+  Build-depends:        base >= 4.0 && < 5,
+                        forvie,
+                        test-framework >= 0.6 && < 0.7,
+                        test-framework-quickcheck2 >= 0.2.9 && < 0.3,
+                        QuickCheck >= 2.4.0.1,
+                        random >= 1.0.1.1,
+                        text >= 0.11.0.8
+  Ghc-options:          -Wall -fno-warn-name-shadowing -fno-warn-unused-matches -fno-warn-orphans

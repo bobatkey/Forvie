@@ -161,10 +161,6 @@ complement = Set . aux minBound . unSet
 intersect :: (Enum a, Bounded a, Ord a) => Set a -> Set a -> Set a
 intersect c1 c2 = Data.RangeSet.complement (Data.RangeSet.complement c1 `union` Data.RangeSet.complement c2)
 
-{------------------------------------------------------------------------------}
--- FIXME: Need to do something with this
---prop_interval a b c = a <= c && c <= b ==> c `memberOf` (interval a b)
-
 --------------------------------------------------------------------------------
 newtype Partition a = Partition (S.Set (Set a))
 
