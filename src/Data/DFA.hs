@@ -36,6 +36,7 @@ module Data.DFA
       -- * Construction
     , FiniteStateAcceptor (..)
     , makeDFA
+    , runFiniteStateAcceptor
     )
     where
 
@@ -71,6 +72,16 @@ instance FiniteStateAcceptor r => FiniteStateAcceptor [r] where
     advance r c s = map (\(r,s) -> advance r c s) $ zip r s
     isAcceptingState r = listToMaybe . mapMaybe (\(r,s) -> isAcceptingState r s) . zip r
     classes r = foldl andClasses (fromSet one) . map (\(r,s) -> classes r s) . zip r
+
+runFiniteStateAcceptor :: FiniteStateAcceptor fsa =>
+                          fsa
+                       -> [Alphabet fsa]
+                       -> Maybe (Result fsa)
+runFiniteStateAcceptor fsa input
+    = run (initState fsa) input
+    where
+      run q []     = isAcceptingState fsa q
+      run q (x:xs) = run (advance fsa x q) xs
 
 {------------------------------------------------------------------------------}
 -- DFA construction
@@ -138,6 +149,15 @@ data DFA a b =
         , finalStates :: IM.IntMap b
         }
     deriving (Eq, Ord, Show)
+
+instance (Enum a, Bounded a, Ord a) => FiniteStateAcceptor (DFA a b) where
+    type State (DFA a b)    = Int
+    type Alphabet (DFA a b) = a
+    type Result (DFA a b)   = b
+    initState dfa          = 0
+    advance dfa a q        = lookup (transitions dfa ! q) a 
+    isAcceptingState dfa q = IM.lookup q (finalStates dfa)
+    classes dfa q          = domain (transitions dfa ! q)
 
 instance Functor (DFA a) where
     fmap f dfa =
