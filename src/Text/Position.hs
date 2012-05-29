@@ -12,7 +12,11 @@ data Position = Position { posCharNum   :: !Int
                          , posLineNum   :: !Int
                          , posColumnNum :: !Int
                          }
-              deriving (Eq, Ord, Show)
+              deriving (Eq, Ord)
+
+instance Show Position where
+    show (Position char line col) =
+        "(Position " ++ show char ++ " " ++ show line ++ " " ++ show col ++ ")"
 
 initPos :: Position
 initPos = Position 0 1 0
