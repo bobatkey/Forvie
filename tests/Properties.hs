@@ -10,6 +10,7 @@ import           Control.Applicative
 import           System.Random
 import           Test.Framework (Test, defaultMain, testGroup)
 import           Test.Framework.Providers.QuickCheck2 (testProperty)
+import           Test.Framework.Providers.HUnit (testCase)
 import           Test.QuickCheck hiding (ranges, Result)
 
 import           Data.BooleanAlgebra
@@ -18,6 +19,7 @@ import           Data.Regexp
 import           Data.DFA
 
 import           Layout
+import           LayoutHUnit
 
 --------------------------------------------------------------------------------
 -- from http://www.cubiclemuses.com/cm/articles/2011/07/14/quickchecking-type-class-laws/
@@ -124,6 +126,11 @@ main = defaultMain
       , testProperty "singleton"      (prop_singleton `asFunctionOf` (undefined :: Char))
       , testProperty "representative" (prop_representative `asFunctionOf` (undefined :: Set Char))
       ]
-    , testProperty "regexp" prop_regexp
-    , testProperty "layout" prop_layout
+    , testGroup "Data.Regexp"
+      [ testProperty "regexp" prop_regexp
+      ]
+    , testGroup "Language.Forvie.Layout"
+      [ testProperty "layout" prop_layout
+      , testCase "layout-hunit" layoutTestCases
+      ]
     ]
