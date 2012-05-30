@@ -73,44 +73,8 @@ data WithLayout a
     | IndentAngle Span Int
     deriving Show
 
-{-
--- takes a stream of lexemes with explicit newlines, and outputs a
--- stream without newlines, but with layout directives
-insertLayout :: (Layout tok, Ord tok) =>
-                SP e (Lexeme (NewlineOr tok)) (WithLayout tok)
-insertLayout = afterBlockOpen
-    where
-      eos = {- Put (IndentCurly 0) -} EOS
-
-      go = Get go'
-          where
-            go' Nothing                      = eos
-            go' (Just (Lexeme Newline _ _))  = afterNewline
-            go' (Just (Lexeme (Token t) p s))
-                = Put (LLexeme (Lexeme t p s)) $
-                  if isBlockOpener t then afterBlockOpen else go
-
-      afterBlockOpen = Get afterBlockOpen'
-          where
-            afterBlockOpen' Nothing                        = eos
-            afterBlockOpen' (Just (Lexeme Newline _ _))    = afterBlockOpen
-            afterBlockOpen' (Just (Lexeme (Token t) p s))
-                = if t == lbrace then
-                      Put (LLexeme (Lexeme t p s)) $ go
-                  else
-                      Put (IndentCurly p (posColumnNum (regionLeft p) + 1)) $
-                      Put (LLexeme (Lexeme t p s)) $
-                      if isBlockOpener t then afterBlockOpen else go
-
-      afterNewline = Get afterNewline'
-          where
-            afterNewline' Nothing = eos
-            afterNewline' (Just (Lexeme Newline _ _)) = afterNewline
-            afterNewline' (Just (Lexeme (Token t) p s))
-                = Put (IndentAngle p (posColumnNum (regionLeft p) + 1)) $
-                  Put (LLexeme (Lexeme t p s)) $
-                  if isBlockOpener t then afterBlockOpen else go
--}
+-- IndentCurly means "I want to start a new block with indentation level 'n'"
+-- IndentAngle means "This line has indentation level 'n', please work out what block it should be in"
 
 {------------------------------------------------------------------------------}
 data LayoutState
@@ -146,9 +110,14 @@ layoutHelper AfterNewline   (Lexeme (Token t) p s) =
     , [ IndentAngle (zeroWidthSpan p) (posColumnNum (regionLeft p) + 1)
       , LLexeme (Lexeme t p s) ] )
 
+layoutEOS :: LayoutState -> [WithLayout a]
+layoutEOS Normal         = []
+layoutEOS AfterBlockOpen = [IndentCurly (Span initPos initPos) 0]
+layoutEOS AfterNewline   = []
+
 insertLayout :: (Layout tok, Ord tok, Monad m) =>
                 Processor (Lexeme (NewlineOr tok)) m (WithLayout tok)
-insertLayout = concatMapAccum layoutHelper (const []) AfterBlockOpen
+insertLayout = concatMapAccum layoutHelper layoutEOS AfterBlockOpen
 
 {------------------------------------------------------------------------------}
 newtype LayoutErrorHandler m =
@@ -165,36 +134,57 @@ prependLexeme :: Lexeme tok
               -> ([Int], [Lexeme tok])
 prependLexeme l (ms,ls) = (ms,l:ls)
 
+equaliseIndentation :: Layout tok =>
+                       Span
+                    -> Int
+                    -> [Int]
+                    -> ( [Int], [Lexeme tok] )
+equaliseIndentation p n [] = ( [], [] )
+equaliseIndentation p n (m:ms)
+    | m == n    = ( m:ms, [semicolonLexeme p] )
+    | n < m     = prependLexeme (rbraceLexeme p) (equaliseIndentation p n ms)
+    | otherwise = ( m:ms, [] )
+
+-- This is invoked when we see an rbrace on the input. We pop the
+-- stack of layout blocks until we reach a user-delimited block. An
+-- alternative would be to strictly require that all the layout blocks
+-- have been closed by indentation before the user inserted rbrace.
+closeUntilUserBlock :: (Monad m, Layout tok) =>
+                       LayoutErrorHandler m
+                    -> Lexeme tok
+                    -> [Int]
+                    -> m ([Int], [Lexeme tok])
+closeUntilUserBlock h l []     = onError h (lexemePos l)
+closeUntilUserBlock h l (0:ms) = return ( ms, [l] )
+closeUntilUserBlock h l (n:ms) = closeUntilUserBlock h l ms >>= return . prependLexeme (rbraceLexeme (lexemePos l))
+
 computeLayoutHelper :: (Layout tok, Monad m) =>
                        LayoutErrorHandler m
                     -> [Int]
                     -> WithLayout tok
                     -> m ([Int], [Lexeme tok])
 computeLayoutHelper h ms     (IndentAngle p n) =
-    case ms of
-      (m:ms) | m == n -> return ( m:ms, [semicolonLexeme p] )
-             | n < m  -> do r <- computeLayoutHelper h ms (IndentAngle p n)
-                            return (prependLexeme (rbraceLexeme p) r)
-      ms              -> return ( ms, [] )
+    return (equaliseIndentation p n ms)
 computeLayoutHelper h ms     (IndentCurly p n) =
     case ms of
-      (m:ms) | n > m  -> return ( n:m:ms, [lbraceLexeme p] )
-      []     | n > 0  -> return ( [n],    [lbraceLexeme p] )
-      ms              -> do r <- computeLayoutHelper h ms (IndentAngle p n)
-                            return (prependLexeme (lbraceLexeme p) $ prependLexeme (rbraceLexeme p) r)
-computeLayoutHelper _ (0:ms) (LLexeme l)
-    | lexemeTok l == rbrace = return ( ms, [l] )
+      (m:ms) | n > m  -> return (n:m:ms, [lbraceLexeme p])
+      []     | n > 0  -> return ([n],    [lbraceLexeme p])
+      ms              -> return (prependLexeme (lbraceLexeme p) $
+                                 prependLexeme (rbraceLexeme p) $
+                                 equaliseIndentation p n ms)
 computeLayoutHelper h ms     (LLexeme l)
-    | lexemeTok l == rbrace = onError h (lexemePos l)
+    | lexemeTok l == rbrace = closeUntilUserBlock h l ms
     | lexemeTok l == lbrace = return ( 0:ms, [l] )
     | otherwise             = return ( ms, [l] )
 
 computeLayoutEOS :: (Layout tok, Monad m) =>
-                    [Int]
+                    LayoutErrorHandler m
+                 -> [Int]
                  -> m [Lexeme tok]
-computeLayoutEOS []     = return []
-computeLayoutEOS (m:ms) = do
-  r <- computeLayoutEOS ms
+computeLayoutEOS _ []     = return []
+computeLayoutEOS h (0:ms) = onError h (Span initPos initPos) -- FIXME: better position
+computeLayoutEOS h (m:ms) = do
+  r <- computeLayoutEOS h ms
   let l = rbraceLexeme (Span initPos initPos) -- FIXME: better position
   return (l:r)
 
@@ -202,47 +192,10 @@ computeLayout :: (Layout tok, Monad m) =>
                  LayoutErrorHandler m
               -> Processor (WithLayout tok) m (Lexeme tok)
 computeLayout errorHandler =
-    concatMapAccumM (computeLayoutHelper errorHandler) computeLayoutEOS []
+    concatMapAccumM (computeLayoutHelper errorHandler) (computeLayoutEOS errorHandler) []
 
 {------------------------------------------------------------------------------}
 layout :: (Layout tok, Monad m) =>
           LayoutErrorHandler m
        -> Processor (Lexeme (NewlineOr tok)) m (Lexeme tok)
 layout errorHandler = insertLayout >>> computeLayout errorHandler
-
-{-
-computeLayout :: (LayoutError e, Layout tok) =>
-                 SP e (WithLayout tok) (Lexeme tok)
-computeLayout = go []
-    where
-      -- FIXME: why these strings?
-
-      go stack = Get $ go' stack
-          where
-            go' ms     (Just (IndentAngle p n))
-                = case ms of
-                    (m:ms) | m == n -> Put (semicolonLexeme p) $ go (m:ms)
-                           | n < m  -> Put (rbraceLexeme p) $ go' ms (Just (IndentAngle p n))
-                    ms              -> go ms
-            go' ms     (Just (IndentCurly p n))
-                = case ms of
-                    (m:ms) | n > m -> Put (lbraceLexeme p) $ go (n:m:ms)
-                    []     | n > 0 -> Put (lbraceLexeme p) $ go [n]
-                    ms             -> Put (lbraceLexeme p) $ Put (rbraceLexeme p) $ go' ms (Just (IndentAngle p n))
-            go' (0:ms) (Just (LLexeme l@(Lexeme t p s)))
-                | t == rbrace      = Put l $ go ms
-            go' ms     (Just (LLexeme (Lexeme t p _)))
-                | t == rbrace      = Error $ layoutError p
-            go' ms     (Just (LLexeme l@(Lexeme t p s)))
-                | t == lbrace      = Put l $ go (0:ms)
-            go' ms     (Just (LLexeme l))
-                = Put l $ go ms
-            go' []     Nothing
-                = EOS
-            go' (m:ms) Nothing
-                = Put (rbraceLexeme (Span initPos initPos)) $ go' ms Nothing -- FIXME: location should be 'at end of input'
-
-layout :: (LayoutError e, Layout tok, Ord tok) =>
-          SP e (Lexeme (NewlineOr tok)) (Lexeme tok)
-layout = insertLayout >>> computeLayout
--}

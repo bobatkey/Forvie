@@ -17,6 +17,8 @@ import           Data.RangeSet
 import           Data.Regexp
 import           Data.DFA
 
+import           Layout
+
 --------------------------------------------------------------------------------
 -- from http://www.cubiclemuses.com/cm/articles/2011/07/14/quickchecking-type-class-laws/
 asFunctionOf :: (a -> b) -> a -> (a -> b)
@@ -123,4 +125,5 @@ main = defaultMain
       , testProperty "representative" (prop_representative `asFunctionOf` (undefined :: Set Char))
       ]
     , testProperty "regexp" prop_regexp
+    , testProperty "layout" prop_layout
     ]

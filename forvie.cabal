@@ -12,7 +12,8 @@ Category:            Text
 Build-type:          Simple
 
 Extra-source-files:  README.md,
-                     tests/Properties.hs
+                     tests/Properties.hs,
+                     tests/Layout.hs
 
 -- Constraint on the version of Cabal needed to build this package.
 Cabal-version:       >=1.8
@@ -75,5 +76,6 @@ Test-suite tests
                         test-framework-quickcheck2 >= 0.2.9 && < 0.3,
                         QuickCheck >= 2.4.0.1,
                         random >= 1.0.1.1,
+                        containers >= 0.4.2.1,
                         text >= 0.11.0.8
   Ghc-options:          -Wall -fno-warn-name-shadowing -fno-warn-unused-matches -fno-warn-orphans
