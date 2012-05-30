@@ -156,7 +156,9 @@ closeUntilUserBlock :: (Monad m, Layout tok) =>
                     -> m ([Int], [Lexeme tok])
 closeUntilUserBlock h l []     = onError h (lexemePos l)
 closeUntilUserBlock h l (0:ms) = return ( ms, [l] )
-closeUntilUserBlock h l (n:ms) = closeUntilUserBlock h l ms >>= return . prependLexeme (rbraceLexeme (lexemePos l))
+closeUntilUserBlock h l (n:ms) = do
+  output <- closeUntilUserBlock h l ms
+  return $ prependLexeme (rbraceLexeme (lexemePos l)) output
 
 computeLayoutHelper :: (Layout tok, Monad m) =>
                        LayoutErrorHandler m
@@ -192,8 +194,10 @@ computeLayout :: (Layout tok, Monad m) =>
                  LayoutErrorHandler m
               -> Processor (WithLayout tok) m (Lexeme tok)
 computeLayout errorHandler =
-    concatMapAccumM (computeLayoutHelper errorHandler) (computeLayoutEOS errorHandler) []
-
+    concatMapAccumM (computeLayoutHelper errorHandler)
+                    (computeLayoutEOS errorHandler)
+                    []
+                    
 {------------------------------------------------------------------------------}
 layout :: (Layout tok, Monad m) =>
           LayoutErrorHandler m
