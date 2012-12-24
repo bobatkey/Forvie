@@ -1,3 +1,14 @@
+-- |
+-- Module             :  Text.Position
+-- Copyright          :  Robert Atkey 2012
+-- License            :  BSD3
+--
+-- Maintainer         :  bob.atkey@gmail.com
+-- Stability          :  experimental
+-- Portability        :  unknown
+--
+-- Representation of positions within a piece of text for the purposes
+-- of error reporting.
 module Text.Position
     ( Position (..)
     , initPos

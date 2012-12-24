@@ -2,10 +2,10 @@
 
 -- |
 -- Module      :  Data.RangeSet
--- Copyright   :  Robert Atkey 2010
+-- Copyright   :  Robert Atkey 2012
 -- License     :  BSD3
 --
--- Maintainer  :  Robert.Atkey@cis.strath.ac.uk
+-- Maintainer  :  bob.atkey@gmail.com
 -- Stability   :  experimental
 -- Portability :  unknown
 --

@@ -5,7 +5,7 @@ Description:         Some lexing and parsing tools
 License:             BSD3
 License-file:        LICENSE
 Author:              Robert Atkey
-Maintainer:          Robert.Atkey@cis.strath.ac.uk
+Maintainer:          bob.atkey@gmail.com
 
 Category:            Text
 
@@ -23,7 +23,7 @@ data-files:          elisp/mode-template.el
 
 source-repository head
    type:     git
-   location: https://github.com/bobatkey/forvie
+   location: https://github.com/bobatkey/Forvie
 
 
 
