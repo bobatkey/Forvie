@@ -163,6 +163,7 @@ intersect c1 c2 = Data.RangeSet.complement (Data.RangeSet.complement c1 `union` 
 
 --------------------------------------------------------------------------------
 newtype Partition a = Partition (S.Set (Set a))
+    deriving Show
 
 fromSet :: (Enum a, Bounded a, Ord a) => Set a -> Partition a
 fromSet s 
