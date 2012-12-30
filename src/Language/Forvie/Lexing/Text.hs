@@ -24,16 +24,16 @@ import           Text.Lexeme (Lexeme (..))
 import           Text.Position (Span (Span), initPos, updatePos, Position)
 
 {------------------------------------------------------------------------------}
-data PositionWith a = At { dataOf     :: a
-                         , positionOf :: Position
-                         }
+data PositionWith a = (:-) { positionOf :: Position
+                           , dataOf     :: a
+                           }
 
 uncons :: PositionWith T.Text  -> Maybe (PositionWith Char, PositionWith T.Text)
-uncons (text `At` position) =
+uncons (position :- text) =
     case T.uncons text of
       Nothing       -> Nothing
-      Just (c,rest) -> Just ( c `At` position
-                            , rest `At` (position `updatePos` c) )
+      Just (c,rest) -> Just ( position                 :- c
+                            , (position `updatePos` c) :- rest)
 
 {------------------------------------------------------------------------------}
 data CurrentLexeme tok
@@ -50,7 +50,7 @@ advance :: CurrentLexeme tok -> CurrentLexeme tok
 advance lexeme = lexeme { curLexemeLen = curLexemeLen lexeme + 1 }
 
 (+.) :: CurrentLexeme tok -> (PositionWith tok, PositionWith T.Text) -> CurrentLexeme tok
-lexeme +. (tok `At` pos, rest) =
+lexeme +. (pos :- tok, rest) =
     lexeme { curLexemeMatch = Match (curLexemeLen lexeme) tok pos rest }
 
 initLexeme :: PositionWith T.Text -> CurrentLexeme tok
@@ -76,7 +76,7 @@ lex :: (Ord tok, Monad m) =>
     -> ErrorHandler m tok
     -> T.Text
     -> Stream m (Lexeme tok)
-lex lexSpec errorHandler text = go (text `At` initPos)
+lex lexSpec errorHandler text = go (initPos :- text)
     where
       dfa = lexSpecDFA lexSpec
       
@@ -93,24 +93,24 @@ lex lexSpec errorHandler text = go (text `At` initPos)
             Nothing   -> emit lexeme Nothing
             Just step -> onChar dfaState step lexeme
 
-      onChar q input@(c `At` position, rest) lexeme =
+      onChar q input@(position :- c, rest) lexeme =
           case DFA.transition dfa q c of
-            DFA.Accepting t q' -> inLexeme q' (advance lexeme +. (t `At` position, rest)) rest
+            DFA.Accepting t q' -> inLexeme q' (advance lexeme +. (position :- t, rest)) rest
             DFA.Error          -> emit lexeme (Just input)
             DFA.Change q'      -> inLexeme q' (advance lexeme) rest
 
       emit lexeme input =
           case curLexemeMatch lexeme of
             NoMatch ->
-                do let input' = case input of Nothing -> Nothing; Just (c `At` p, _) -> Just (c,p)
+                do let input' = case input of Nothing -> Nothing; Just (p :- c, _) -> Just (c,p)
                    tok <- errorHandler `onError` input'
                    return (StreamElem (Lexeme tok span text) $ go rest)
                 where
                   endPos = case input of
-                             Nothing            -> positionOf $ curLexemeText lexeme -- FIXME: this is wrong!
-                             Just (_ `At` p, _) -> p
+                             Nothing          -> positionOf $ curLexemeText lexeme -- FIXME: this is wrong!
+                             Just (p :- _, _) -> p
                   rest   = case input of
-                             Nothing        -> T.empty `At` initPos -- FIXME
+                             Nothing        -> initPos :- T.empty -- FIXME
                              Just (_, rest) -> rest
                   length = curLexemeLen lexeme + case input of Nothing -> 0; Just _ -> 1
                   span   = Span (positionOf $ curLexemeText lexeme) endPos
