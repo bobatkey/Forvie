@@ -22,7 +22,10 @@ module Data.Regexp
     )
     where
 
+import           Prelude hiding (all, any)
 import qualified Data.Set as S
+import           Data.Monoid
+import           Data.Foldable hiding (foldr, all, any)
 import           Data.String
 import           Data.RangeSet
 import qualified Data.DFA as DFA
@@ -33,13 +36,13 @@ classesN :: (Enum a, Bounded a, Ord a) => Regexp a -> Partition a
 classesN (NSeq ns) = classesNs ns
     where
       classesNs []          = fromSet one
-      classesNs (n:ns) 
-          | matchesEmptyN n = classesN n `andClasses` classesNs ns
+      classesNs (n:ns)
+          | matchesEmptyN n = classesN n `mappend` classesNs ns
           | otherwise       = classesN n
-classesN (NAlt ns) = foldr andClasses (fromSet one) $ map classesN $ S.elems ns
+classesN (NAlt ns) = foldMap classesN ns
 classesN (NTok c)  = fromSet c
 classesN (NStar n) = classesN n
-classesN (NAnd ns) = foldr andClasses (fromSet one) $ map classesN $ S.elems ns
+classesN (NAnd ns) = foldMap classesN ns
 classesN (NNot n)  = classesN n
 
 {------------------------------------------------------------------------------}
@@ -60,26 +63,26 @@ instance (Ord a, Enum a, Bounded a) => DFA.FiniteStateAcceptor (Regexp a) where
 
 {------------------------------------------------------------------------------}
 matchesEmptyN :: Regexp a -> Bool
-matchesEmptyN (NSeq ns) = and $ map matchesEmptyN ns
-matchesEmptyN (NAlt ns) = or $ map matchesEmptyN $ S.elems ns
+matchesEmptyN (NSeq ns) = all matchesEmptyN ns
+matchesEmptyN (NAlt ns) = any matchesEmptyN ns
 matchesEmptyN (NTok c)  = False
 matchesEmptyN (NStar _) = True
-matchesEmptyN (NNot n)  = not $ matchesEmptyN n
-matchesEmptyN (NAnd ns) = and $ map matchesEmptyN $ S.elems ns
+matchesEmptyN (NNot n)  = not (matchesEmptyN n)
+matchesEmptyN (NAnd ns) = all matchesEmptyN ns
 
 diffN :: Ord a => a -> Regexp a -> Regexp a
 diffN c (NSeq ns)  = diffNs ns
     where
       diffNs []     = nZero
-      diffNs (n:ns) 
+      diffNs (n:ns)
           | matchesEmptyN n = (diffN c n `nSeq` NSeq ns) `nAlt` diffNs ns
           | otherwise       = diffN c n `nSeq` NSeq ns
-diffN c (NAlt ns)  = foldr nAlt nZero $ map (diffN c) $ S.elems ns
+diffN c (NAlt ns)  = any (diffN c) ns
 diffN c (NTok cl)
     | c `memberOf` cl = nEps
     | otherwise       = nZero
 diffN c (NStar ns) = diffN c ns `nSeq` NStar ns
-diffN c (NAnd ns)  = foldr nAnd nTop $ map (diffN c) $ S.elems ns
+diffN c (NAnd ns)  = all (diffN c) ns
 diffN c (NNot n)   = NNot (diffN c n)
 
 {------------------------------------------------------------------------------}

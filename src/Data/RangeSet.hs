@@ -1,4 +1,4 @@
-{-# LANGUAGE OverloadedStrings, FlexibleInstances #-}
+{-# LANGUAGE OverloadedStrings, FlexibleInstances, TupleSections #-}
 
 -- |
 -- Module      :  Data.RangeSet
@@ -37,21 +37,23 @@ module Data.RangeSet
     -- * Partitions
     , Partition
     , fromSet
-    , andClasses
+--    , andClasses
       
     -- * Maps
     , TotalMap
     , makeTotalMap
-    , makeTotalMapM
-    , lookup
+    , makeTotalMapA
+    , ($@)
     , assocs
     , domain
     )
     where
 
-import           Prelude hiding (null, lookup)
+import           Prelude hiding (null)
+import           Data.Monoid
 import qualified Data.Set as S
-import           Control.Monad (forM)
+import           Control.Applicative hiding (empty)
+import           Data.Traversable
 import           Data.List (intercalate)
 import           Data.Maybe (fromJust)
 import           Data.BooleanAlgebra
@@ -171,14 +173,20 @@ fromSet s
     | s == empty      = Partition (S.fromList [ everything ])
     | otherwise       = Partition (S.fromList [ s, Data.RangeSet.complement s ])
 
+{-
 andClasses :: (Enum a, Bounded a, Ord a) =>
               Partition a -> Partition a -> Partition a
-andClasses (Partition x) (Partition y) =
-    Partition $ S.fromList [ i |
-                             a <- S.elems x
-                           , b <- S.elems y
-                           , let i = a `intersect` b 
-                           , not (null i)]
+andClasses 
+-}
+
+instance (Enum a, Bounded a, Ord a) => Monoid (Partition a) where
+    mempty = Partition (S.fromList [ everything ])
+    mappend (Partition x) (Partition y) =
+        Partition $ S.fromList [ i |
+                                 a <- S.elems x
+                               , b <- S.elems y
+                               , let i = a `intersect` b 
+                               , not (null i)] 
 
 --------------------------------------------------------------------------------
 -- FIXME: need a better representation than this
@@ -186,23 +194,27 @@ andClasses (Partition x) (Partition y) =
 newtype TotalMap a b = TotalMap { unTotalMap :: [(Set a,b)] }
     deriving (Eq, Ord, Show)
 
+
 makeTotalMap :: Partition a -> (a -> b) -> TotalMap a b
 makeTotalMap (Partition sets) f =
     TotalMap [ (set, f (fromJust $ getRepresentative set)) | set <- S.elems sets ]
 
-makeTotalMapM :: Monad m => Partition a -> (a -> m b) -> m (TotalMap a b)
-makeTotalMapM (Partition sets) f =
-    do mappings <- forM (S.elems sets) $ \set -> do b <- f (fromJust $ getRepresentative set)
-                                                    return (set, b)
-       return (TotalMap mappings)
+makeTotalMapA :: Applicative f =>
+                 Partition a
+              -> (a -> f b)
+              -> f (TotalMap a b)
+makeTotalMapA (Partition sets) f =
+    TotalMap <$> (traverse doClass $ S.elems sets)
+    where
+      doClass cls = (cls,) <$> f (fromJust $ getRepresentative cls)
 
 -- FIXME: this is the wrong name
 domain :: Ord a => TotalMap a b -> Partition a
 domain = Partition . S.fromList . map fst . unTotalMap
 
-lookup :: Ord a => TotalMap a b -> a -> b
-lookup (TotalMap mappings) a = go mappings
-    where 
+($@) :: Ord a => TotalMap a b -> a -> b
+TotalMap mappings $@ a = go mappings
+    where
       go []        = error "internal error: not a total map"
       go ((s,b):m) = if a `memberOf` s then b else go m
 

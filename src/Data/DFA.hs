@@ -29,55 +29,58 @@ module Data.DFA
       DFA (..)
       
       -- * Simulation
-    , runDFA
     , TransitionResult (..)
     , transition
-      
+
       -- * Construction
     , FiniteStateAcceptor (..)
     , makeDFA
-    , runFiniteStateAcceptor
+    , runFSA
     )
     where
 
-import           Prelude hiding (lookup)
-import           Data.Maybe (listToMaybe, mapMaybe)
+import           Data.Foldable (foldMap)
+import           Data.Maybe (listToMaybe, mapMaybe, maybeToList)
 import qualified Data.Map as M
 import qualified Data.IntMap as IM
 import qualified Data.IntSet as IS
 import           Data.Array (Array, array, (!))
 import           Data.RangeSet
-import           Data.BooleanAlgebra (one)
 import qualified Control.Monad.State as S
-import           Control.Monad.State (get, modify, put, gets, execState, when)
+import           Control.Monad.State (modify, gets, execState, join, unless)
+import           Control.Applicative ((<$>))
 
 {------------------------------------------------------------------------------}
-class (Ord (State r), Enum (Alphabet r), Ord (Alphabet r), Bounded (Alphabet r))
-    => FiniteStateAcceptor r where
-    type State r     :: *
-    type Alphabet r  :: *
-    type Result r    :: *
-    initState        :: r -> State r
-    advance          :: r -> Alphabet r -> State r -> State r
-    isAcceptingState :: r -> State r -> Maybe (Result r)
-    classes          :: r -> State r -> Partition (Alphabet r)
+class ( Ord (State fsa)
+      , Enum (Alphabet fsa)
+      , Ord (Alphabet fsa)
+      , Bounded (Alphabet fsa)) => FiniteStateAcceptor fsa where
+    type State fsa    :: *
+    type Alphabet fsa :: *
+    type Result fsa   :: *
+
+    initState        :: fsa -> State fsa
+    advance          :: fsa -> Alphabet fsa -> State fsa -> State fsa
+    isAcceptingState :: fsa -> State fsa -> Maybe (Result fsa)
+    classes          :: fsa -> State fsa -> Partition (Alphabet fsa)
 
 -- really, vectors, but I can't be bothered
-instance FiniteStateAcceptor r => FiniteStateAcceptor [r] where
-    type State [r]    = [State r]
-    type Alphabet [r] = Alphabet r
-    type Result [r]   = Result r
+instance FiniteStateAcceptor fsa => FiniteStateAcceptor [fsa] where
+    type State [fsa]    = [State fsa]
+    type Alphabet [fsa] = Alphabet fsa
+    type Result [fsa]   = Result fsa
 
     initState r = map initState r
     advance r c s = map (\(r,s) -> advance r c s) $ zip r s
-    isAcceptingState r = listToMaybe . mapMaybe (\(r,s) -> isAcceptingState r s) . zip r
-    classes r = foldl andClasses (fromSet one) . map (\(r,s) -> classes r s) . zip r
+    isAcceptingState r =
+        listToMaybe . mapMaybe (\(r,s) -> isAcceptingState r s) . zip r
+    classes r = foldMap (uncurry classes) . zip r
 
-runFiniteStateAcceptor :: FiniteStateAcceptor fsa =>
+runFSA :: FiniteStateAcceptor fsa =>
                           fsa
                        -> [Alphabet fsa]
                        -> Maybe (Result fsa)
-runFiniteStateAcceptor fsa input
+runFSA fsa input
     = run (initState fsa) input
     where
       run q []     = isAcceptingState fsa q
@@ -86,53 +89,74 @@ runFiniteStateAcceptor fsa input
 {------------------------------------------------------------------------------}
 -- DFA construction
 data ConstructorState re
-    = CS { csStates      :: M.Map (State re) Int
-         , _csNextState   :: Int
-         , csTransitions :: IM.IntMap (TotalMap (Alphabet re) Int)
-         , csFinalReachingStates :: IS.IntSet
-         , _csFinalStates :: IM.IntMap (Result re)
+    = CS { csVisited     :: !(M.Map (State re) Int)
+         , csNextState   :: !Int
+         , csTransitions :: !(IM.IntMap (TotalMap (Alphabet re) Int))
+         , csBackEdges   :: !(IM.IntMap [Int])
+         , csAccepting   :: !(IM.IntMap (Result re))
          }
 
 type ConstructorM re a = S.State (ConstructorState re) a
 
-haveVisited :: Ord (State re) => State re -> ConstructorM re (Maybe Int)
-haveVisited r = get >>= return . M.lookup r . csStates
+haveVisited :: Ord (State fsa) => State fsa -> ConstructorM fsa (Maybe Int)
+haveVisited q = gets (M.lookup q . csVisited)
 
-setTransitions :: FiniteStateAcceptor re => Int -> TotalMap (Alphabet re) Int -> ConstructorM re ()
+setTransitions :: FiniteStateAcceptor fsa =>
+                  Int
+               -> TotalMap (Alphabet fsa) Int
+               -> ConstructorM fsa ()
 setTransitions src map =
     modify $ \s -> s { csTransitions = IM.insert src map (csTransitions s) }
 
--- FIXME: could compress all error states into one?
-newState :: FiniteStateAcceptor re => re -> State re -> ConstructorM re Int
+addBackEdge :: Int
+            -> Int
+            -> ConstructorM fsa ()
+addBackEdge tgt src = do
+  srcs <- (join . maybeToList . IM.lookup tgt) <$> gets csBackEdges
+  modify $ \cs -> cs { csBackEdges = IM.insert tgt (src:srcs) (csBackEdges cs) }
+
+newState :: FiniteStateAcceptor fsa =>
+            fsa
+         -> State fsa
+         -> ConstructorM fsa Int
 newState r st = do
-  CS states next trans finalReaching final <- get
-  let states' = M.insert st next states
-      next'   = next + 1
-      finalReaching' = case isAcceptingState r st of
-                         Nothing -> finalReaching
-                         Just _  -> IS.insert next finalReaching
-      final'  = case isAcceptingState r st of
-                  Nothing  -> final
-                  Just res -> IM.insert next res final
-  put (CS states' next' trans finalReaching' final')
-  return next
+  q <- gets csNextState
+  modify $ \cs -> cs { csNextState = csNextState cs + 1
+                     , csVisited   = M.insert st q (csVisited cs)
+                     , csAccepting = case isAcceptingState r st of
+                                       Nothing -> csAccepting cs
+                                       Just x  -> IM.insert q x (csAccepting cs)
+                     }
+  return q
 
--- we are exploring the state space by DFS, so we could return 'accReachable' as
--- we go. Add everything that is 'accReachable' to some set. Take the complement
--- of the set to get the error state set.
-
-explore :: FiniteStateAcceptor re => re -> State re -> ConstructorM re Int
+explore :: FiniteStateAcceptor fsa =>
+           fsa
+        -> State fsa
+        -> ConstructorM fsa Int
 explore r q = do
-  s <- newState r q
-  t <- makeTotalMapM (classes r q)
-       $ \c -> do let q' = advance r c q
-                  visited <- haveVisited q'
-                  s'      <- case visited of Nothing -> explore r q'; Just s -> return s
-                  frs     <- gets csFinalReachingStates
-                  when (IS.member s' frs) $ modify $ \cs -> cs { csFinalReachingStates = IS.insert s (csFinalReachingStates cs) }
-                  return s'
-  setTransitions s t
-  return s
+  visited <- haveVisited q
+  case visited of
+    Nothing -> do
+      s <- newState r q
+      t <- makeTotalMapA (classes r q) $ \c -> do
+                 s' <- explore r (advance r c q)
+                 addBackEdge s' s
+                 return s'
+      setTransitions s t
+      return s
+    Just s -> return s
+
+findReachable :: IM.IntMap [Int] -> Int -> IS.IntSet
+findReachable edges s = execState (go s) IS.empty
+    where
+      go s = do
+        visited <- gets (IS.member s)
+        unless visited $ do
+          modify (IS.insert s)
+          mapM_ go (join $ maybeToList $ IM.lookup s edges)
+
+findAllReachable :: IM.IntMap [Int] -> [Int] -> IS.IntSet
+findAllReachable edges = foldMap (findReachable edges)
 
 -- | The 'DFA' type has two parameters, the type of input tokens 'a'
 -- and the type of output annotations for final states 'b'.
@@ -142,11 +166,11 @@ explore r q = do
 -- automaton.
 data DFA a b =
     DFA { -- | Transition functions of the DFA, indexed by state number.
-          transitions :: Array Int (TotalMap a Int)
+          transitions :: !(Array Int (TotalMap a Int))
           -- | The set of error states. Transitions from states in this set will always lead back to this set, and never to an accepting state.
-        , errorStates :: IS.IntSet
+        , errorStates :: !IS.IntSet
           -- | The set of accepting states, with final values.
-        , finalStates :: IM.IntMap b
+        , finalStates :: !(IM.IntMap b)
         }
     deriving (Eq, Ord, Show)
 
@@ -155,7 +179,7 @@ instance (Enum a, Bounded a, Ord a) => FiniteStateAcceptor (DFA a b) where
     type Alphabet (DFA a b) = a
     type Result (DFA a b)   = b
     initState dfa          = 0
-    advance dfa a q        = lookup (transitions dfa ! q) a 
+    advance dfa a q        = (transitions dfa ! q) $@ a
     isAcceptingState dfa q = IM.lookup q (finalStates dfa)
     classes dfa q          = domain (transitions dfa ! q)
 
@@ -163,16 +187,22 @@ instance Functor (DFA a) where
     fmap f dfa =
         dfa { finalStates = fmap f (finalStates dfa) }
 
-makeDFA :: FiniteStateAcceptor re => re -> DFA (Alphabet re) (Result re)
-makeDFA r = DFA transArray error final
+makeDFA :: FiniteStateAcceptor fsa => fsa -> DFA (Alphabet fsa) (Result fsa)
+makeDFA r = DFA transitions error final
     where
-      init = CS M.empty 0 IM.empty IS.empty IM.empty
+      init = CS M.empty 0 IM.empty IM.empty IM.empty
 
-      CS _states next trans finalReaching final = execState (explore r (initState r)) init
+      CS _ next trans backEdges final =
+          execState (explore r (initState r)) init
 
-      error = IS.fromList [ i | i <- [0..next-1], not (IS.member i finalReaching) ]
+      finalReaching =
+          findAllReachable backEdges (IM.keys final)
 
-      transArray = array (0,next-1) (IM.assocs trans)
+      error =
+          IS.fromList [ i | i <- [0..next-1], not (IS.member i finalReaching) ]
+
+      transitions =
+          array (0,next-1) (IM.assocs trans)
 
 {------------------------------------------------------------------------------}
 {- Running DFAs -}
@@ -187,21 +217,9 @@ transition dfa state c = result
     where
       DFA transitions errorStates acceptingStates = dfa
       
-      newState = lookup (transitions ! state) c
-      
+      newState = (transitions ! state) $@ c
+
       result = if IS.member newState errorStates then Error
                else case IM.lookup newState acceptingStates of
                       Nothing -> Change newState
                       Just a  -> Accepting a newState
-
--- | 
-runDFA :: Ord a =>
-          DFA a b -> -- A concrete representation of a deterministic finite automaton
-          [a] ->     -- A list of input tokens from the DFA's alphabet. Must be finite.
-          Maybe b    -- Acceptance state of the DFA at the end of the input list.
-runDFA dfa = aux 0
-    where
-      DFA transitions _ final = dfa
-
-      aux s []     = IM.lookup s final
-      aux s (c:cs) = aux (lookup (transitions ! s) c) cs
