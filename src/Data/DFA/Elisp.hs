@@ -1,6 +1,15 @@
+-- |
+-- Module      :  Data.DFA.Elisp
+-- Copyright   :  Robert Atkey 2012
+-- License     :  BSD3
+--
+-- Maintainer  :  bob.atkey@gmail.com
+-- Stability   :  experimental
+-- Portability :  unknown
+--
+
 module Data.DFA.Elisp
-    ( makeTransitionFunction 
-    , makeTransitionFunctionCharTables )
+    ( makeTransitionFunctionCharTables )
     where
 
 import           Data.Array (assocs, range, bounds)
@@ -66,47 +75,6 @@ makeTransitionFunctionCharTables prefix dfa =
                                 , res
                                 ]
 
-      mkResult q =
-        if q `IS.member` errorStates then Nothing -- SExpr [ Atom "list", Atom "'error" ]
-        else case IM.lookup q acceptingStates of
-               Nothing -> Just $ SExpr [ Atom "list", Atom "'change", IntConst q ]
-               Just t  -> Just $ SExpr [ Atom "list", Atom "'accept", IntConst q, showSExpr t ]
-                           
-      flattenCSets = concat . mapMaybe flattenCSet 
-          where
-            flattenCSet (cset, q) = do res <- mkResult q
-                                       return $ map (\(low,high) -> (low, high, res)) (ranges cset)
-
-
-makeTransitionFunction :: ShowSExpr a => String -> DFA Char a -> [SExpr]
-makeTransitionFunction name dfa =
-    [ SExpr [ Atom "defun"
-            , Atom (name ++ "-transition-function")
-            , SExpr [ Atom "state"
-                    , Atom "char"
-                    ]
-            , cond clauses
-            ]
-    ]
-    where
-      DFA transitions errorStates acceptingStates = dfa
-      
-      clauses = map doState $ assocs transitions
-      
-      doState (q, trans) = ( SExpr [ Atom "=", Atom "state", IntConst q ]
-                           , cond $ (map doTrans $ flattenCSets $ RS.assocs trans)
-                                    ++
-                                    [( Atom "t", SExpr [ Atom "list", Atom "'error" ])]
-                           )
-                           
-      doTrans (low, high, res)
-          | low == high = ( SExpr [ Atom "=", Atom "char", IntConst (ord high) ], res)
-          | otherwise   = ( SExpr [ Atom "and"
-                                  , SExpr [ Atom "<=", IntConst (ord low), Atom "char" ]
-                                  , SExpr [ Atom "<=", Atom "char", IntConst (ord high) ]     
-                                  ]
-                          , res)
-      
       mkResult q =
         if q `IS.member` errorStates then Nothing -- SExpr [ Atom "list", Atom "'error" ]
         else case IM.lookup q acceptingStates of
