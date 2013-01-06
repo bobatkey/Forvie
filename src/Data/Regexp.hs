@@ -2,7 +2,7 @@
 
 -- |
 -- Module          :  Data.Regexp
--- Copyright       :  Robert Atkey 2012
+-- Copyright       :  (C) Robert Atkey 2013
 -- License         :  BSD3
 --
 -- Maintainer      :  bob.atkey@gmail.com
@@ -19,6 +19,7 @@ module Data.Regexp
     , oneOrMore
     , tok
     , module Data.BooleanAlgebra
+    , module Data.Monoid
     )
     where
 
@@ -26,7 +27,7 @@ import           Prelude hiding (all, any)
 import qualified Data.Set as S
 import           Data.Monoid
 import           Data.Foldable hiding (foldr, all, any)
-import           Data.String
+import           Data.String (IsString (..))
 import           Data.RangeSet
 import qualified Data.DFA as DFA
 import           Data.BooleanAlgebra
@@ -95,6 +96,8 @@ data Regexp a
     | NStar (Regexp a)
       deriving (Eq, Ord, Show)
 
+{------------------------------------------------------------------------------}
+-- | Match a string literal exactly.
 instance IsString (Regexp Char) where
     fromString s = NSeq $ map (NTok . singleton) s
 
@@ -105,6 +108,13 @@ instance Ord a => BooleanAlgebra (Regexp a) where
     one        = nTop
     zero       = nZero
 
+-- | Sequencing of regular expressions.
+instance Monoid (Regexp a) where
+    mempty  = NSeq []
+    mappend = (.>>.)
+    mconcat = NSeq
+
+{------------------------------------------------------------------------------}
 (.>>.) :: Regexp a -> Regexp a -> Regexp a
 (.>>.) = nSeq
 

@@ -2,7 +2,6 @@ module Language.Forvie.Util.Templater where
 
 import           Prelude hiding (foldl, lex)
 import           Control.Monad.Identity (runIdentity)
-import           Data.Monoid (mempty, mappend)
 import           Data.Char (ord)
 import           Data.Word (Word8)
 import qualified Data.Map as M
