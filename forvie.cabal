@@ -39,6 +39,7 @@ Library
                         Language.Forvie.Editor.EmacsMode,
                         Language.Forvie.SyntaxHighlight.Html,
                         Language.Forvie.Layout,
+                        Control.FiniteStateMachine,
                         Data.CharSet,
                         Data.BooleanAlgebra,
                         Data.RangeSet,

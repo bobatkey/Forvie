@@ -66,9 +66,9 @@ lex dfa errorHandler string = go 0
       onChar q pos lexeme =
           let c = BU.unsafeIndex string pos in
           case DFA.transition dfa q c of
-            DFA.Accepting t q' -> inLexeme q' (advance lexeme +. t) (pos + 1)
-            DFA.Error          -> emit lexeme (Just c)
-            DFA.Change q'      -> inLexeme q' (advance lexeme) (pos + 1)
+            DFA.Accept t q' -> inLexeme q' (advance lexeme +. t) (pos + 1)
+            DFA.Error       -> emit lexeme (Just c)
+            DFA.Change q'   -> inLexeme q' (advance lexeme) (pos + 1)
 
       emit lexeme input =
           let startPos = curLexemePos lexeme in

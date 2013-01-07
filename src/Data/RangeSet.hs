@@ -2,7 +2,7 @@
 
 -- |
 -- Module      :  Data.RangeSet
--- Copyright   :  Robert Atkey 2012
+-- Copyright   :  (C) Robert Atkey 2013
 -- License     :  BSD3
 --
 -- Maintainer  :  bob.atkey@gmail.com
@@ -21,31 +21,30 @@
 
 module Data.RangeSet
     (
-    -- * Range Set type
+    -- * Subsets of 'Bounded' types
       Set ()
       
-    -- * Construction 
+    -- ** Construction 
     , singleton
     , interval
       
-    -- * Queries
+    -- ** Queries
     , memberOf
     , getRepresentative
     , null
     , ranges
     
-    -- * Partitions
+    -- * Partitions of 'Bounded' types
     , Partition
     , fromSet
---    , andClasses
       
-    -- * Maps
+    -- * Total maps
     , TotalMap
     , makeTotalMap
     , makeTotalMapA
     , ($@)
     , assocs
-    , domain
+    , domainPartition
     )
     where
 
@@ -76,6 +75,8 @@ _isNormalForm (Set l) = check1 l
 --instance (Ord a, Arbitrary a) => Arbitrary (Set a) where
 --    arbitrary = (Set <$> arbitrary) `suchThat` isNormalForm
 
+-- | 'Data.RangeSet.Set's over bounded types are 'BooleanAlgebra's
+-- using the normal set-theoretic operations.
 instance (Enum a, Ord a, Bounded a) => BooleanAlgebra (Set a) where
     (.&.)      = intersect
     (.|.)      = union
@@ -89,31 +90,33 @@ instance (Enum a, Ord a, Bounded a) => BooleanAlgebra (Set a) where
 ranges :: Set a -> [(a,a)]
 ranges (Set l) = l
 
+-- | String representation of 'Data.RangeSet.Set's as an ordered list
+-- of ranges. See also 'ranges'.
 instance (Eq a, Show a) => Show (Set a) where
     show (Set l) = "[" ++ intercalate "," (map showRange l) ++ "]"
         where showRange (l,h)
                   | l == h    = show l
                   | otherwise = show l ++ "-" ++ show h
 
--- | The empty set
+-- | The empty set. A synonym for 'zero'.
 empty :: Set a
 empty = Set []
 
--- FIXME: could shortcut search if i > c.
--- | Test to determine whether the given 'a' is in the 'Set a'.
+-- | Test to determine whether the given @a@ is in the 'Set'.
 memberOf :: Ord a => a -> Set a -> Bool
 memberOf c (Set l) = aux c l
     where
+      -- FIXME: could shortcut search if i > c.
       aux c []        = False
       aux c ((i,j):l) = (i <= c && c <= j) || aux c l
 
--- | Returns an arbitrary element in the given set. Returns
+-- | Returns an arbitrary element in the given 'Set'. Returns
 -- 'Nothing' if the set is empty.
 getRepresentative :: Set a -> Maybe a
 getRepresentative (Set [])        = Nothing
 getRepresentative (Set ((i,_):_)) = Just i
 
--- | Set consisting of a single unicode code point.
+-- | 'Set' consisting of a element.
 singleton :: a -> Set a
 singleton c = Set [(c,c)]
 
@@ -155,30 +158,32 @@ complement = Set . aux minBound . unSet
           | start <= maxBound = [(start,maxBound)]
           | otherwise         = []
       aux start ((i,j):l)
-          | start == i        = if j == maxBound then [] else aux (succ j) l
-          | otherwise         = (start,pred i):if j == maxBound then [] else aux (succ j) l
+          | start == i =
+              if j == maxBound then [] else aux (succ j) l
+          | otherwise =
+              (start,pred i):if j == maxBound then [] else aux (succ j) l
 
 -- | Computes the intersection of two sets. Returns the set containing
 -- all the elements found in both of the given sets.
 intersect :: (Enum a, Bounded a, Ord a) => Set a -> Set a -> Set a
-intersect c1 c2 = Data.RangeSet.complement (Data.RangeSet.complement c1 `union` Data.RangeSet.complement c2)
+intersect c1 c2 =
+    Data.RangeSet.complement
+        (Data.RangeSet.complement c1 `union` Data.RangeSet.complement c2)
 
 --------------------------------------------------------------------------------
+-- | A partition of a 'Bounded' type into equivalence classes.
 newtype Partition a = Partition (S.Set (Set a))
     deriving Show
 
+-- | Creates a partition with two equivalence classes. One class is
+-- the given set, and the other is its complement.
 fromSet :: (Enum a, Bounded a, Ord a) => Set a -> Partition a
 fromSet s 
     | s == everything = Partition (S.fromList [ s ])
     | s == empty      = Partition (S.fromList [ everything ])
     | otherwise       = Partition (S.fromList [ s, Data.RangeSet.complement s ])
 
-{-
-andClasses :: (Enum a, Bounded a, Ord a) =>
-              Partition a -> Partition a -> Partition a
-andClasses 
--}
-
+-- | Intersection of partitions. FIXME: should be a lattice.
 instance (Enum a, Bounded a, Ord a) => Monoid (Partition a) where
     mempty = Partition (S.fromList [ everything ])
     mappend (Partition x) (Partition y) =
@@ -191,32 +196,45 @@ instance (Enum a, Bounded a, Ord a) => Monoid (Partition a) where
 --------------------------------------------------------------------------------
 -- FIXME: need a better representation than this
 -- Should be a balanced tree
+
+-- | A total map from @a@ to @b@, represented using a partition of the
+-- domain into equivalence classes.
 newtype TotalMap a b = TotalMap { unTotalMap :: [(Set a,b)] }
     deriving (Eq, Ord, Show)
 
-
-makeTotalMap :: Partition a -> (a -> b) -> TotalMap a b
-makeTotalMap (Partition sets) f =
+-- | Construct a 'TotalMap' by providing a function to 
+makeTotalMap :: (a -> b)
+             -> Partition a
+             -> TotalMap a b
+makeTotalMap f (Partition sets) =
     TotalMap [ (set, f (fromJust $ getRepresentative set)) | set <- S.elems sets ]
 
+-- | 'Applicative' version of 'makeTotalMap'.
 makeTotalMapA :: Applicative f =>
-                 Partition a
-              -> (a -> f b)
+                 (a -> f b)
+              -> Partition a
               -> f (TotalMap a b)
-makeTotalMapA (Partition sets) f =
+makeTotalMapA f (Partition sets) =
     TotalMap <$> (traverse doClass $ S.elems sets)
     where
       doClass cls = (cls,) <$> f (fromJust $ getRepresentative cls)
 
 -- FIXME: this is the wrong name
-domain :: Ord a => TotalMap a b -> Partition a
-domain = Partition . S.fromList . map fst . unTotalMap
 
+-- | Return the 'Partition' of @a@ that was used to construct this
+-- 'TotalMap'. Note that this may not necessarily be the coarsest
+-- partition of the domain of this 'TotalMap'.
+domainPartition :: Ord a => TotalMap a b -> Partition a
+domainPartition = Partition . S.fromList . map fst . unTotalMap
+
+-- | Apply a 'TotalMap' to a value.
 ($@) :: Ord a => TotalMap a b -> a -> b
 TotalMap mappings $@ a = go mappings
     where
       go []        = error "internal error: not a total map"
       go ((s,b):m) = if a `memberOf` s then b else go m
 
+-- | Returns the list of equivalence classes over the domain and their
+-- associated codomain values.
 assocs :: TotalMap a b -> [(Set a, b)]
 assocs (TotalMap mappings) = mappings

@@ -22,7 +22,7 @@
 module Language.Forvie.Lexing.Spec
     ( -- * Example
       -- $example
-      
+
       -- * Specification of Lexical Structure
       LexicalSpecification
     , (:==>) (..)
@@ -52,26 +52,14 @@ module Language.Forvie.Lexing.Spec
     )
     where
 
-import           Data.Functor ((<$>))
 import           Language.Haskell.TH.Syntax
+import           Control.FiniteStateMachine
 import qualified Data.DFA as DFA
 import           Data.Regexp
 import           Data.CharSet
 
 -- $example
 -- FIXME: do an example
-
-data a :==> b = a :==> b
-    deriving (Eq, Ord, Show)
-
-instance DFA.FiniteStateAcceptor r => DFA.FiniteStateAcceptor (r :==> a) where
-     type State (r :==> a)    = DFA.State r
-     type Alphabet (r :==> a) = DFA.Alphabet r
-     type Result (r :==> a)   = a
-     initState (r :==> a) = DFA.initState r
-     advance (r :==> a) c s = DFA.advance r c s
-     isAcceptingState (r :==> a) s = const a <$> DFA.isAcceptingState r s
-     classes (r :==> a) s = DFA.classes r s
 
 -- | A 'LexicalSpecification' represents the specification of the
 -- lexical structure of a language.

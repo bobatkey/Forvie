@@ -9,7 +9,7 @@
 -- Stability       :  experimental
 -- Portability     :  unknown
 --
--- Regular expressions.
+-- Regular expressions over an arbitrary bounded alphabet.
 
 module Data.Regexp
     ( Regexp ()
@@ -26,13 +26,63 @@ module Data.Regexp
 import           Prelude hiding (all, any)
 import qualified Data.Set as S
 import           Data.Monoid
+import           Data.BooleanAlgebra
 import           Data.Foldable hiding (foldr, all, any)
 import           Data.String (IsString (..))
 import           Data.RangeSet
-import qualified Data.DFA as DFA
-import           Data.BooleanAlgebra
+import           Control.FiniteStateMachine
+import           Control.Monad (guard)
+
+-- | Regular expressions over an arbitrary alphabet.
+data Regexp a
+    = NSeq  [Regexp a]
+    | NAlt  (S.Set (Regexp a))
+    | NTok  (Set a)
+    | NAnd  (S.Set (Regexp a))
+    | NNot  (Regexp a)
+    | NStar (Regexp a)
+    deriving (Eq, Ord, Show)
 
 {------------------------------------------------------------------------------}
+-- | Match a string literal exactly.
+instance IsString (Regexp Char) where
+    fromString s = NSeq $ map (NTok . singleton) s
+
+-- | Regular expressions form a boolean algebra.
+instance Ord a => BooleanAlgebra (Regexp a) where
+    (.&.)      = nAnd
+    (.|.)      = nAlt
+    complement = NNot
+    one        = nTop
+    zero       = nZero
+
+-- | Sequencing of regular expressions.
+instance Monoid (Regexp a) where
+    mempty  = NSeq []
+    mappend = (.>>.)
+    mconcat = NSeq
+
+{------------------------------------------------------------------------------}
+-- | Regular expressions are directly finite state machines via
+-- Brzozowski derivatives.
+instance (Ord a, Enum a, Bounded a) => FiniteStateMachine (Regexp a) where
+    type State    (Regexp a) = Regexp a
+    type Alphabet (Regexp a) = a
+    type Result   (Regexp a) = ()
+    initState r        = r
+    advance _ c        = diffN c
+    isAcceptingState _ = guard . matchesEmptyN
+    classes _          = classesN
+
+{------------------------------------------------------------------------------}
+matchesEmptyN :: Regexp a -> Bool
+matchesEmptyN (NSeq ns) = all matchesEmptyN ns
+matchesEmptyN (NAlt ns) = any matchesEmptyN ns
+matchesEmptyN (NTok c)  = False
+matchesEmptyN (NStar _) = True
+matchesEmptyN (NNot n)  = not (matchesEmptyN n)
+matchesEmptyN (NAnd ns) = all matchesEmptyN ns
+
 classesN :: (Enum a, Bounded a, Ord a) => Regexp a -> Partition a
 classesN (NSeq ns) = classesNs ns
     where
@@ -45,31 +95,6 @@ classesN (NTok c)  = fromSet c
 classesN (NStar n) = classesN n
 classesN (NAnd ns) = foldMap classesN ns
 classesN (NNot n)  = classesN n
-
-{------------------------------------------------------------------------------}
--- Class instance
-
-boolToMaybe :: Bool -> Maybe ()
-boolToMaybe True  = Just ()
-boolToMaybe False = Nothing
-
-instance (Ord a, Enum a, Bounded a) => DFA.FiniteStateAcceptor (Regexp a) where
-    type State    (Regexp a) = Regexp a
-    type Alphabet (Regexp a) = a
-    type Result   (Regexp a) = ()
-    initState r        = r
-    advance _ c        = diffN c
-    isAcceptingState _ = boolToMaybe . matchesEmptyN
-    classes _          = classesN
-
-{------------------------------------------------------------------------------}
-matchesEmptyN :: Regexp a -> Bool
-matchesEmptyN (NSeq ns) = all matchesEmptyN ns
-matchesEmptyN (NAlt ns) = any matchesEmptyN ns
-matchesEmptyN (NTok c)  = False
-matchesEmptyN (NStar _) = True
-matchesEmptyN (NNot n)  = not (matchesEmptyN n)
-matchesEmptyN (NAnd ns) = all matchesEmptyN ns
 
 diffN :: Ord a => a -> Regexp a -> Regexp a
 diffN c (NSeq ns)  = diffNs ns
@@ -86,35 +111,9 @@ diffN c (NStar ns) = diffN c ns `nSeq` NStar ns
 diffN c (NAnd ns)  = all (diffN c) ns
 diffN c (NNot n)   = NNot (diffN c n)
 
-{------------------------------------------------------------------------------}
-data Regexp a
-    = NSeq  [Regexp a]
-    | NAlt  (S.Set (Regexp a))
-    | NTok  (Set a)
-    | NAnd  (S.Set (Regexp a))
-    | NNot  (Regexp a)
-    | NStar (Regexp a)
-      deriving (Eq, Ord, Show)
 
 {------------------------------------------------------------------------------}
--- | Match a string literal exactly.
-instance IsString (Regexp Char) where
-    fromString s = NSeq $ map (NTok . singleton) s
-
-instance Ord a => BooleanAlgebra (Regexp a) where
-    (.&.)      = nAnd
-    (.|.)      = nAlt
-    complement = NNot
-    one        = nTop
-    zero       = nZero
-
 -- | Sequencing of regular expressions.
-instance Monoid (Regexp a) where
-    mempty  = NSeq []
-    mappend = (.>>.)
-    mconcat = NSeq
-
-{------------------------------------------------------------------------------}
 (.>>.) :: Regexp a -> Regexp a -> Regexp a
 (.>>.) = nSeq
 
@@ -127,6 +126,8 @@ zeroOrMore = star
 oneOrMore :: Regexp a -> Regexp a
 oneOrMore n = n .>>. star n
 
+-- | A regular expression that accepts a single token from the given
+-- set of tokens.
 tok :: Set a -> Regexp a
 tok cs = NTok cs
 

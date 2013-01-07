@@ -95,9 +95,9 @@ lex lexSpec errorHandler text = go (initPos :- text)
 
       onChar q input@(position :- c, rest) lexeme =
           case DFA.transition dfa q c of
-            DFA.Accepting t q' -> inLexeme q' (advance lexeme +. (position :- t, rest)) rest
-            DFA.Error          -> emit lexeme (Just input)
-            DFA.Change q'      -> inLexeme q' (advance lexeme) rest
+            DFA.Accept t q' -> inLexeme q' (advance lexeme +. (position :- t, rest)) rest
+            DFA.Error       -> emit lexeme (Just input)
+            DFA.Change q'   -> inLexeme q' (advance lexeme) rest
 
       emit lexeme input =
           case curLexemeMatch lexeme of

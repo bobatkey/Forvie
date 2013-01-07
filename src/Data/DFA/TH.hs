@@ -38,7 +38,7 @@ makeTransitionFunction (DFA transitions errorStates acceptingStates)
             if q `IS.member` errorStates then [| Error |]
             else case IM.lookup q acceptingStates of
                    Nothing -> [| Change q |]
-                   Just a  -> [| Accepting a q |]
+                   Just a  -> [| Accept a q |]
 
         flattenCSets = concat . map flattenCSet 
             where

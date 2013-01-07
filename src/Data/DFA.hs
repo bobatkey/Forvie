@@ -1,8 +1,8 @@
-{-# LANGUAGE PackageImports, TypeFamilies, FlexibleInstances, FlexibleContexts, TypeOperators #-}
+{-# LANGUAGE TypeFamilies, FlexibleInstances, FlexibleContexts, TypeOperators #-}
 
 -- |
 -- Module           :  Data.DFA
--- Copyright        :  Robert Atkey 2012
+-- Copyright        :  (C) Robert Atkey 2013
 -- License          :  BSD3
 --
 -- Maintainer       :  bob.atkey@gmail.com
@@ -12,7 +12,7 @@
 -- Representation, simulation and construction of Deterministic Finite
 -- Automata (DFAs).
 --
--- This module uses the 'TotalMap' type from Data.RangeSet to
+-- This module uses the 'TotalMap' type from "Data.RangeSet" to
 -- represent the transition functions for each state. This can provide
 -- a compact representation even when the alphabet of the DFA is
 -- large, e.g. all Unicode codepoints.
@@ -21,74 +21,79 @@
 -- function. This takes values of types that can be treated as
 -- deterministic finite state machines and constructs a concrete
 -- finite state machine with the same behaviour. The algorithm used is
--- an abstraction of the one presented by Owens et al in "Regular
--- expression derivatives re-examined" (FIXME: proper reference).
+-- an abstraction of the one presented by Owens et al in /Regular
+-- expression derivatives re-examined/ (FIXME: proper reference).
+--
+-- The DFAs represented here have explicit representation of error
+-- states. An error state is a state from which an accepting state can
+-- never be reached. Explicit representation of error states is needed
+-- when using DFAs for gathering longest matches when scanning text to
+-- determine lexemes.
+--
+-- FIXME: write more about the difference between 'DFA's and
+-- 'FiniteStateMachine's.
 
 module Data.DFA
     ( -- * Representation
       DFA (..)
       
+      -- * Construction
+    , makeDFA
+
       -- * Simulation
     , TransitionResult (..)
     , transition
 
-      -- * Construction
-    , FiniteStateAcceptor (..)
-    , makeDFA
-    , runFSA
     )
     where
 
 import           Data.Foldable (foldMap)
-import           Data.Maybe (listToMaybe, mapMaybe, maybeToList)
+import           Data.Maybe (maybeToList)
 import qualified Data.Map as M
 import qualified Data.IntMap as IM
 import qualified Data.IntSet as IS
 import           Data.Array (Array, array, (!))
-import           Data.RangeSet
+import           Data.RangeSet (TotalMap, ($@), domainPartition, makeTotalMapA)
 import qualified Control.Monad.State as S
 import           Control.Monad.State (modify, gets, execState, join, unless)
-import           Control.Applicative ((<$>))
+import           Data.Functor ((<$>))
+import           Control.FiniteStateMachine
 
-{------------------------------------------------------------------------------}
-class ( Ord (State fsa)
-      , Enum (Alphabet fsa)
-      , Ord (Alphabet fsa)
-      , Bounded (Alphabet fsa)) => FiniteStateAcceptor fsa where
-    type State fsa    :: *
-    type Alphabet fsa :: *
-    type Result fsa   :: *
+-- | The 'DFA' type has two parameters, the type of input tokens 'a'
+-- and the type @b@ of output values attached to accepting states. FIXME: rewrite this to mention 'deterministic finite automaton'
+--
+-- The states of a DFA are represented as 'Int' values in the range
+-- '[0..n]', where 'n' is the number of states of the
+-- automaton. State '0' is always the initial state.
+data DFA a b = DFA
+    { -- | Transition functions of the DFA, indexed by state number.
+      transitions :: !(Array Int (TotalMap a Int))
+    -- | The set of error states. Transitions from states in this set
+    -- will always lead back to this set, and never to an accepting
+    -- state.
+    , errorStates :: !IS.IntSet
+    -- | The set of accepting states, with attached values.
+    , acceptingStates :: !(IM.IntMap b)
+    } deriving (Eq, Show)
 
-    initState        :: fsa -> State fsa
-    advance          :: fsa -> Alphabet fsa -> State fsa -> State fsa
-    isAcceptingState :: fsa -> State fsa -> Maybe (Result fsa)
-    classes          :: fsa -> State fsa -> Partition (Alphabet fsa)
+-- | DFAs are finite state machines.
+instance (Enum a, Bounded a, Ord a) => FiniteStateMachine (DFA a b) where
+    type State (DFA a b)    = Int
+    type Alphabet (DFA a b) = a
+    type Result (DFA a b)   = b
+    initState dfa = 0
+    advance dfa a q = (transitions dfa ! q) $@ a
+    isAcceptingState dfa q = IM.lookup q (acceptingStates dfa)
+    classes dfa q = domainPartition (transitions dfa ! q)
 
--- really, vectors, but I can't be bothered
-instance FiniteStateAcceptor fsa => FiniteStateAcceptor [fsa] where
-    type State [fsa]    = [State fsa]
-    type Alphabet [fsa] = Alphabet fsa
-    type Result [fsa]   = Result fsa
-
-    initState r = map initState r
-    advance r c s = map (\(r,s) -> advance r c s) $ zip r s
-    isAcceptingState r =
-        listToMaybe . mapMaybe (\(r,s) -> isAcceptingState r s) . zip r
-    classes r = foldMap (uncurry classes) . zip r
-
-runFSA :: FiniteStateAcceptor fsa =>
-                          fsa
-                       -> [Alphabet fsa]
-                       -> Maybe (Result fsa)
-runFSA fsa input
-    = run (initState fsa) input
-    where
-      run q []     = isAcceptingState fsa q
-      run q (x:xs) = run (advance fsa x q) xs
+-- | Transform the result values of a DFA.
+instance Functor (DFA a) where
+    fmap f dfa =
+        dfa { acceptingStates = fmap f (acceptingStates dfa) }
 
 {------------------------------------------------------------------------------}
 -- DFA construction
-data ConstructorState re
+data ConstructionState re
     = CS { csVisited     :: !(M.Map (State re) Int)
          , csNextState   :: !Int
          , csTransitions :: !(IM.IntMap (TotalMap (Alphabet re) Int))
@@ -96,29 +101,31 @@ data ConstructorState re
          , csAccepting   :: !(IM.IntMap (Result re))
          }
 
-type ConstructorM re a = S.State (ConstructorState re) a
+type ConstructionM re a = S.State (ConstructionState re) a
 
-haveVisited :: Ord (State fsa) => State fsa -> ConstructorM fsa (Maybe Int)
+haveVisited :: Ord (State fsm) =>
+               State fsm
+            -> ConstructionM fsm (Maybe Int)
 haveVisited q = gets (M.lookup q . csVisited)
 
-setTransitions :: FiniteStateAcceptor fsa =>
+setTransitions :: FiniteStateMachine fsm =>
                   Int
-               -> TotalMap (Alphabet fsa) Int
-               -> ConstructorM fsa ()
+               -> TotalMap (Alphabet fsm) Int
+               -> ConstructionM fsm ()
 setTransitions src map =
     modify $ \s -> s { csTransitions = IM.insert src map (csTransitions s) }
 
 addBackEdge :: Int
             -> Int
-            -> ConstructorM fsa ()
+            -> ConstructionM fsm ()
 addBackEdge tgt src = do
   srcs <- (join . maybeToList . IM.lookup tgt) <$> gets csBackEdges
   modify $ \cs -> cs { csBackEdges = IM.insert tgt (src:srcs) (csBackEdges cs) }
 
-newState :: FiniteStateAcceptor fsa =>
-            fsa
-         -> State fsa
-         -> ConstructorM fsa Int
+newState :: FiniteStateMachine fsm =>
+            fsm
+         -> State fsm
+         -> ConstructionM fsm Int
 newState r st = do
   q <- gets csNextState
   modify $ \cs -> cs { csNextState = csNextState cs + 1
@@ -129,23 +136,28 @@ newState r st = do
                      }
   return q
 
-explore :: FiniteStateAcceptor fsa =>
-           fsa
-        -> State fsa
-        -> ConstructorM fsa Int
+-- | Main DFA generation function.
+explore :: FiniteStateMachine fsm =>
+           fsm
+        -> State fsm
+        -> ConstructionM fsm Int
 explore r q = do
   visited <- haveVisited q
   case visited of
     Nothing -> do
       s <- newState r q
-      t <- makeTotalMapA (classes r q) $ \c -> do
-                 s' <- explore r (advance r c q)
-                 addBackEdge s' s
-                 return s'
+      let doClass c = do
+            s' <- explore r (advance r c q)
+            addBackEdge s' s
+            return s'
+      t <- makeTotalMapA doClass (classes r q)
       setTransitions s t
       return s
     Just s -> return s
 
+-- Determines the set of reachable states from a given state using the
+-- provided edges. This function is used to discover which states are
+-- unrecoverable error states in generated automata.
 findReachable :: IM.IntMap [Int] -> Int -> IS.IntSet
 findReachable edges s = execState (go s) IS.empty
     where
@@ -155,39 +167,16 @@ findReachable edges s = execState (go s) IS.empty
           modify (IS.insert s)
           mapM_ go (join $ maybeToList $ IM.lookup s edges)
 
+-- Uses 'findReachable' to determine the set of states reachable from
+-- a list of states. This function is used to discover which states
+-- are unrecoverable error states in generated automata.
 findAllReachable :: IM.IntMap [Int] -> [Int] -> IS.IntSet
 findAllReachable edges = foldMap (findReachable edges)
 
--- | The 'DFA' type has two parameters, the type of input tokens 'a'
--- and the type of output annotations for final states 'b'.
---
--- The states of a DFA are represented as 'Int' values in the range
--- '[0..n]', where 'n' is the number of states of the
--- automaton.
-data DFA a b =
-    DFA { -- | Transition functions of the DFA, indexed by state number.
-          transitions :: !(Array Int (TotalMap a Int))
-          -- | The set of error states. Transitions from states in this set will always lead back to this set, and never to an accepting state.
-        , errorStates :: !IS.IntSet
-          -- | The set of accepting states, with final values.
-        , finalStates :: !(IM.IntMap b)
-        }
-    deriving (Eq, Ord, Show)
-
-instance (Enum a, Bounded a, Ord a) => FiniteStateAcceptor (DFA a b) where
-    type State (DFA a b)    = Int
-    type Alphabet (DFA a b) = a
-    type Result (DFA a b)   = b
-    initState dfa          = 0
-    advance dfa a q        = (transitions dfa ! q) $@ a
-    isAcceptingState dfa q = IM.lookup q (finalStates dfa)
-    classes dfa q          = domain (transitions dfa ! q)
-
-instance Functor (DFA a) where
-    fmap f dfa =
-        dfa { finalStates = fmap f (finalStates dfa) }
-
-makeDFA :: FiniteStateAcceptor fsa => fsa -> DFA (Alphabet fsa) (Result fsa)
+-- | Construct a 'DFA' from a 'FiniteStateMachine'.
+makeDFA :: FiniteStateMachine fsm =>
+           fsm
+        -> DFA (Alphabet fsm) (Result fsm)
 makeDFA r = DFA transitions error final
     where
       init = CS M.empty 0 IM.empty IM.empty IM.empty
@@ -205,14 +194,21 @@ makeDFA r = DFA transitions error final
           array (0,next-1) (IM.assocs trans)
 
 {------------------------------------------------------------------------------}
-{- Running DFAs -}
+-- | Representation of the result of stepping a 'DFA'.
 data TransitionResult a
-    = Accepting a Int
+    = Accept a !Int
     | Error
-    | Change Int
-      deriving (Eq, Ord, Show)
+    | Change !Int
+    deriving (Eq, Ord, Show)
 
-transition :: Ord a => DFA a b -> Int -> a -> TransitionResult b
+-- | Step a 'DFA' in a given state on a given input. If an error state
+-- is reached, then this fact is returned instead of the actual state
+-- name.
+transition :: Ord a =>
+              DFA a b -- ^ a deterministic finite automaton
+           -> Int -- ^ state number
+           -> a -- ^ input token
+           -> TransitionResult b -- ^ the result of this transition
 transition dfa state c = result
     where
       DFA transitions errorStates acceptingStates = dfa
@@ -222,4 +218,4 @@ transition dfa state c = result
       result = if IS.member newState errorStates then Error
                else case IM.lookup newState acceptingStates of
                       Nothing -> Change newState
-                      Just a  -> Accepting a newState
+                      Just a  -> Accept a newState
