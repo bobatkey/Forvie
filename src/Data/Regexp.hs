@@ -34,13 +34,13 @@ import           Control.FiniteStateMachine
 import           Control.Monad (guard)
 
 -- | Regular expressions over an arbitrary alphabet.
-data Regexp a
-    = NSeq  [Regexp a]
-    | NAlt  (S.Set (Regexp a))
-    | NTok  (Set a)
-    | NAnd  (S.Set (Regexp a))
-    | NNot  (Regexp a)
-    | NStar (Regexp a)
+data Regexp alphabet
+    = NSeq  [Regexp alphabet]
+    | NAlt  (S.Set (Regexp alphabet))
+    | NTok  (Set alphabet)
+    | NAnd  (S.Set (Regexp alphabet))
+    | NNot  (Regexp alphabet)
+    | NStar (Regexp alphabet)
     deriving (Eq, Ord, Show)
 
 {------------------------------------------------------------------------------}
@@ -49,7 +49,7 @@ instance IsString (Regexp Char) where
     fromString s = NSeq $ map (NTok . singleton) s
 
 -- | Regular expressions form a boolean algebra.
-instance Ord a => BooleanAlgebra (Regexp a) where
+instance Ord alphabet => BooleanAlgebra (Regexp alphabet) where
     (.&.)      = nAnd
     (.|.)      = nAlt
     complement = NNot
@@ -57,7 +57,7 @@ instance Ord a => BooleanAlgebra (Regexp a) where
     zero       = nZero
 
 -- | Sequencing of regular expressions.
-instance Monoid (Regexp a) where
+instance Monoid (Regexp alphabet) where
     mempty  = NSeq []
     mappend = (.>>.)
     mconcat = NSeq
@@ -113,16 +113,22 @@ diffN c (NNot n)   = NNot (diffN c n)
 
 
 {------------------------------------------------------------------------------}
--- | Sequencing of regular expressions.
+-- | Sequential sequencing of regular expressions.
 (.>>.) :: Regexp a -> Regexp a -> Regexp a
 (.>>.) = nSeq
 
+-- | @star re@ matches zero or more repetitions of @re@. Synonym of
+-- 'zeroOrMore'.
 star :: Regexp a -> Regexp a
 star n = NStar n
 
+-- | @zeroOrMore re@ matches zero or more repetitions of @re@. Synonym
+-- of 'star'.
 zeroOrMore :: Regexp a -> Regexp a
 zeroOrMore = star
 
+-- | @oneOrMore re@ matches one or more repetitions of
+-- @re@. Equivalent to @re .>>. star re@.
 oneOrMore :: Regexp a -> Regexp a
 oneOrMore n = n .>>. star n
 
