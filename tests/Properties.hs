@@ -13,6 +13,7 @@ import           Test.Framework.Providers.QuickCheck2 (testProperty)
 import           Test.Framework.Providers.HUnit (testCase)
 import           Test.QuickCheck hiding (ranges, Result)
 
+import           Control.FiniteStateMachine
 import           Data.BooleanAlgebra
 import           Data.RangeSet
 import           Data.Regexp
@@ -114,7 +115,7 @@ instance Arbitrary RegexpInput where
 -- anything, so we only test part of the specification.
 prop_regexp :: Regexp Char -> RegexpInput -> Bool
 prop_regexp (r :: Regexp Char) (RegexpInput i) =
-    runFSA r i == runFSA (makeDFA r) i
+    runFSM r i == runFSM (makeDFA r) i
 
 --------------------------------------------------------------------------------
 main :: IO ()
