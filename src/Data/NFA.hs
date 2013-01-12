@@ -1,9 +1,27 @@
-{-# LANGUAGE TypeFamilies #-}
+{-# LANGUAGE TypeFamilies, RankNTypes #-}
+
+-- |
+-- Module          :  Data.NFA
+-- Copyright       :  (C) Robert Atkey 2013
+-- License         :  BSD3
+--
+-- Maintainer      :  bob.atkey@gmail.com
+-- Stability       :  experimental
+-- Portability     :  unknown
+--
+-- Nondeterministic finite automata.
 
 module Data.NFA
-    ( NFA (..)
-    , nfa1
-    , nfa2 )
+    ( -- * Nondeterministic Finite Automata
+      NFA ()
+
+      -- * Construction of NFAs via a monadic interface
+      -- $constructionexample
+    , NFAConstruction
+    , St ()
+    , toNFA
+    , state
+    , acceptingState )
     where
 
 import           Prelude hiding (or)
@@ -11,6 +29,7 @@ import           Data.Monoid (Monoid (..))
 import           Data.Foldable (fold, foldMap)
 import           Data.Maybe (fromMaybe)
 import           Control.FiniteStateMachine (FiniteStateMachine (..))
+import           Control.Monad.Fix (MonadFix (..))
 import           Data.BooleanAlgebra (or)
 import           Data.Functor ((<$>))
 import qualified Data.RangeSet as RS
@@ -19,13 +38,116 @@ import qualified Data.IntMap as IM
 import qualified Data.Map as M
 import qualified Data.Set as S
 
+-- | Representation of Nondeterministic Finite Automata (NFAs). An NFA
+-- of type @NFA alphabet result@ operates on input symbols of type
+-- @alphabet@, and accepting states are labelled with values of type
+-- @result@.
+data NFA alphabet result = NFA
+    { nfaInputTransitions   :: IM.IntMap (M.Map alphabet IS.IntSet)
+    , nfaEpsilonTransitions :: IM.IntMap IS.IntSet
+    , nfaAcceptingStates    :: IM.IntMap result
+    } deriving (Show, Eq, Ord)
+
+-- | Modification of result values.
+instance Functor (NFA alphabet) where
+    fmap f nfa =
+        nfa { nfaAcceptingStates = fmap f (nfaAcceptingStates nfa) }
+
 --------------------------------------------------------------------------------
-data NFA a b =
-    NFA { nfaInputTransitions   :: IM.IntMap (M.Map a IS.IntSet)
-        , nfaEpsilonTransitions :: IM.IntMap IS.IntSet
-        , nfaAcceptingStates    :: IM.IntMap b
-        }
-    deriving (Show, Eq, Ord)
+-- Construction of NFAs
+
+-- $constructionexample
+-- FIXME: do an example of using the NFA construction interface
+
+
+-- | Monad used to construct NFAs incrementally. FIXME: do an example.
+newtype NFAConstruction s alphabet result a = NFAConstruction
+    { unNFAConstruction :: Int
+                        -> NFA alphabet result
+                        -> (Int, NFA alphabet result, a) }
+
+-- | Abstract type of NFA states for an under construction NFA. The
+-- type tag @s@ links a value of type @St s@ to a particular
+-- construction process, ensuring that states from different NFAs
+-- cannot be confused.
+newtype St s = St { unSt :: Int }
+
+-- | Handles generation of fresh state names and gathering of
+-- transition maps.
+instance Monad (NFAConstruction s alphabet result) where
+    return a =
+        NFAConstruction $ \nextState nfa ->
+            (nextState, nfa, a)
+
+    NFAConstruction c >>= f =
+        NFAConstruction $ \nextState0 nfa0 ->
+            let (nextState1, nfa1, a) = c nextState0 nfa0
+            in unNFAConstruction (f a) nextState1 nfa1
+
+-- | Allow construction of NFAs with loops.
+instance MonadFix (NFAConstruction s alphabet result) where
+    mfix f =
+        NFAConstruction $ \nextState nfa ->
+            let (nextState', nfa', a) = unNFAConstruction (f a) nextState nfa
+            in (nextState', nfa', a)
+
+-- | Add a state to an under construction NFA.
+state :: Ord alphabet =>
+         [ (alphabet, St s) ] -- ^ State transitions on input tokens from the new state
+      -> [ St s ] -- ^ Epsilon transitions from the new state
+      -> NFAConstruction s alphabet result (St s)
+state inputTrans epsTrans =
+    NFAConstruction $ \nextState nfa ->
+        let thisState = nextState
+
+            newEpsilonTransitions =
+                IM.insert thisState
+                  (IS.fromList $ fmap unSt epsTrans)
+                  (nfaEpsilonTransitions nfa)
+
+            inputTransitionMap =
+                foldr (\(inpTok,st) ->
+                           M.insertWith IS.union inpTok (IS.singleton (unSt st)))
+                    M.empty
+                    inputTrans
+
+            newInputTransitions =
+                IM.insert thisState
+                  inputTransitionMap
+                  (nfaInputTransitions nfa) in
+        ( nextState+1
+        , nfa { nfaInputTransitions = newInputTransitions
+              , nfaEpsilonTransitions = newEpsilonTransitions
+              }
+        , St thisState )
+
+-- | Add an accepting state to an under construction NFA.
+acceptingState :: Ord alphabet =>
+                  [ (alphabet, St s) ] -- ^ State transitions on input tokens from the new state
+               -> [ St s ] -- ^ Epsilon transitions from the new state
+               -> result -- ^ Result value associated with the current state
+               -> NFAConstruction s alphabet result (St s)
+acceptingState inputTrans epsTrans result = do
+  s <- state inputTrans epsTrans
+  setAccepting s result
+  return s
+
+setAccepting :: St s -> result -> NFAConstruction s alphabet result ()
+setAccepting (St q) result =
+    NFAConstruction $ \nextState nfa ->
+        ( nextState
+        , nfa { nfaAcceptingStates =
+                    IM.insert q result (nfaAcceptingStates nfa) }
+        , () )
+
+-- | Construct a concrete NFA from an 'NFAConstruction'.
+toNFA :: (forall s. NFAConstruction s alphabet result ())
+      -> NFA alphabet result
+toNFA c = nfa
+    where
+      emptyNFA = NFA IM.empty IM.empty IM.empty
+
+      (_, nfa, _) = unNFAConstruction c 0 emptyNFA
 
 --------------------------------------------------------------------------------
 epsilonTransition :: NFA a b -> Int -> IS.IntSet
@@ -50,15 +172,15 @@ possibleInputs :: NFA a b -> Int -> [a]
 possibleInputs nfa q =
     fromMaybe [] (M.keys <$> IM.lookup q (nfaInputTransitions nfa))
 
--- | Treat an 'NFA a b' as a finite state machine using the subset
--- construction. The 'Monoid b' constraint should also indicate a
--- *commutative* monoid.
-instance (Enum a, Ord a, Bounded a, Monoid b) =>
-         FiniteStateMachine (NFA a b)
+-- | Treat an @NFA alphabet result@ as a finite state machine using
+-- the subset construction. The @Monoid result@ constraint should be
+-- read to indicate a *commutative* monoid.
+instance (Enum alphabet, Ord alphabet, Bounded alphabet, Monoid result) =>
+         FiniteStateMachine (NFA alphabet result)
     where
-    type State (NFA a b)    = IS.IntSet
-    type Alphabet (NFA a b) = a
-    type Result (NFA a b)   = b
+    type State (NFA alphabet result)    = IS.IntSet
+    type Alphabet (NFA alphabet result) = alphabet
+    type Result (NFA alphabet result)   = result
 
     initState nfa = closeUnderEpsilon nfa (IS.singleton 0)
 
@@ -68,7 +190,9 @@ instance (Enum a, Ord a, Bounded a, Monoid b) =>
               IS.unions $ map (inputTransition nfa a) $ IS.elems stateSet
 
     isAcceptingState nfa stateSet =
-        mconcat $ map (\q -> IM.lookup q (nfaAcceptingStates nfa)) $ IS.elems stateSet
+        mconcat $
+        map (\q -> IM.lookup q (nfaAcceptingStates nfa)) $
+        IS.elems stateSet
 
     classes nfa state = partition
         where
@@ -97,24 +221,3 @@ instance (Ord a, Ord b) => Monoid (Grouping a b) where
     mempty = Grouping M.empty
     mappend (Grouping map1) (Grouping map2) =
         Grouping (M.unionWith S.union map1 map2)
-
---------------------------------------------------------------------------------
--- a test NFA
-nfa1 :: NFA Char ()
-nfa1 = NFA { nfaInputTransitions   = IM.fromList [ (0, M.fromList [ ('a', IS.fromList [ 0, 1 ])
-                                                                  , ('b', IS.fromList [ 1 ])
-                                                                  ])
-                                                 , (1, M.fromList [ ('a', IS.fromList [ 0 ])
-                                                                  ])
-                                                 ]
-           , nfaEpsilonTransitions = IM.fromList [ ]
-           , nfaAcceptingStates    = IM.fromList [ (0, ()) ]
-           }
-
-nfa2 :: NFA Char String
-nfa2 = NFA
-       { nfaInputTransitions   = IM.fromList [ ]
-       , nfaEpsilonTransitions = IM.fromList [ (0, IS.fromList [1])
-                                             , (1, IS.fromList [2]) ]
-       , nfaAcceptingStates    = IM.fromList [ (0, "a"), (1, "b") ]
-       }
