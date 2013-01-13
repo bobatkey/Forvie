@@ -16,6 +16,7 @@ module Language.Forvie.Lexing.Text
     where
 
 import           Prelude hiding (lex)
+import           Data.ByteString (ByteString)
 import qualified Data.Text as T
 import           Data.MonadicStream (Stream (..), StreamStep (..))
 import qualified Data.DFA as DFA
@@ -74,9 +75,11 @@ step (InLexeme q lexeme text) = undefined
 lex :: (Ord tok, Monad m) =>
        CompiledLexSpec tok
     -> ErrorHandler m tok
+    -> ByteString
     -> T.Text
     -> Stream m (Lexeme tok)
-lex lexSpec errorHandler text = go (initPos :- text)
+lex lexSpec errorHandler sourceName text =
+    go (initPos sourceName :- text)
     where
       dfa = lexSpecDFA lexSpec
       
@@ -110,7 +113,7 @@ lex lexSpec errorHandler text = go (initPos :- text)
                              Nothing          -> positionOf $ curLexemeText lexeme -- FIXME: this is wrong!
                              Just (p :- _, _) -> p
                   rest   = case input of
-                             Nothing        -> initPos :- T.empty -- FIXME
+                             Nothing        -> initPos sourceName :- T.empty -- FIXME
                              Just (_, rest) -> rest
                   length = curLexemeLen lexeme + case input of Nothing -> 0; Just _ -> 1
                   span   = Span (positionOf $ curLexemeText lexeme) endPos

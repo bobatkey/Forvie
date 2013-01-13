@@ -112,7 +112,7 @@ layoutHelper AfterNewline   (Lexeme (Token t) p s) =
 
 layoutEOS :: LayoutState -> [WithLayout a]
 layoutEOS Normal         = []
-layoutEOS AfterBlockOpen = [IndentCurly (Span initPos initPos) 0]
+layoutEOS AfterBlockOpen = [IndentCurly (Span (initPos "") (initPos "")) 0]
 layoutEOS AfterNewline   = []
 
 insertLayout :: (Layout tok, Ord tok, Monad m) =>
@@ -184,10 +184,11 @@ computeLayoutEOS :: (Layout tok, Monad m) =>
                  -> [Int]
                  -> m [Lexeme tok]
 computeLayoutEOS _ []     = return []
-computeLayoutEOS h (0:ms) = onError h (Span initPos initPos) -- FIXME: better position
+computeLayoutEOS h (0:ms) =
+    onError h (Span (initPos "") (initPos "")) -- FIXME: better position
 computeLayoutEOS h (m:ms) = do
   r <- computeLayoutEOS h ms
-  let l = rbraceLexeme (Span initPos initPos) -- FIXME: better position
+  let l = rbraceLexeme (Span (initPos "") (initPos "")) -- FIXME: better position
   return (l:r)
 
 computeLayout :: (Layout tok, Monad m) =>
