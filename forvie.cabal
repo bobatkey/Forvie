@@ -54,14 +54,14 @@ Library
                         Data.SExpr
 
   -- Packages needed in order to build this package.
-  Build-depends:     	template-haskell >= 2.5.0.0,
+  Build-depends:     	template-haskell >= 2.8.0.0,
                         base >= 4,
                         array >= 0.3.0.0,
-                        containers >= 0.3.0.0,
+                        containers >= 0.5.0.0,
                         text >= 0.11.0.8,
                         mtl >= 2.0.1.0,
                         transformers >= 0.2.2.0,
-                        bytestring >= 0.9.1.10,
+                        bytestring >= 0.10.2.0,
                         pretty >= 1.0.1.1,
                         blaze-html >= 0.4.1.1
 
@@ -81,6 +81,7 @@ Test-suite tests
                         QuickCheck >= 2.4.0.1,
                         HUnit >= 1.2.4.2,
                         random >= 1.0.1.1,
-                        containers >= 0.4.2.1,
+                        containers >= 0.5.0.0,
+                        bytestring >= 0.10.2.0,
                         text >= 0.11.0.8
   Ghc-options:          -Wall -fno-warn-name-shadowing -fno-warn-unused-matches -fno-warn-orphans

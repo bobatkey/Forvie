@@ -61,7 +61,8 @@ instance Layout SToken where
 -- makes a dummy lexeme with the given indentation and token
 -- FIXME: do the indentation and line counts correctly
 mkLexeme :: Int -> a -> Lexeme a
-mkLexeme indent a = Lexeme a (Span (Position 0 0 indent) (Position 0 0 indent)) ""
+mkLexeme indent a =
+    Lexeme a (Span (Position "<test input>" 0 0 indent) (Position "<test input>" 0 0 indent)) ""
 
 --------------------------------------------------------------------------------
 -- Takes a structure and renders it as a stream of tokens, with the

@@ -50,7 +50,7 @@ exceptIgnorable = filter f
           f (Lexeme (Emit   t) p s) = Just (Lexeme t p s)
 
 lexer :: Monad m => T.Text -> Stream m (Lexeme (Action (NewlineOr Token)))
-lexer = lex lexicalSpec (OnError $ \x -> fail (show x))
+lexer = lex lexicalSpec (OnError $ \x -> fail (show x)) "<test input>"
 
 doLayout :: Processor (Lexeme (Action (NewlineOr Token))) Maybe (Lexeme Token)
 doLayout = exceptIgnorable >>> layout (OnLayoutError $ const Nothing)
