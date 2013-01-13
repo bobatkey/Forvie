@@ -1,6 +1,6 @@
 -- |
 -- Module             :  Text.Lexeme
--- Copyright          :  Robert Atkey 2012
+-- Copyright          :  (C) Robert Atkey 2013
 -- License            :  BSD3
 --
 -- Maintainer         :  bob.atkey@gmail.com
@@ -19,20 +19,14 @@ import           Text.Position (Span, Regioned (..))
 
 -- | A lexeme is an annotated piece of text from a larger body of
 -- text, consisting of three parts:
---
---  * A token, indicating the semantic meaning that has been given to
---  this piece of text.
---
---  * A 'Span' indicating the position of this lexeme in the larger
---  body of text.
---
---  * The piece of text itself
-data Lexeme tok = Lexeme { lexemeTok  :: !tok
-                         , lexemePos  :: !Span
-                         , lexemeText :: !T.Text
-                         }
-                deriving (Eq, Ord, Show)
+data Lexeme token = Lexeme
+    { lexemeTok  :: !token  -- ^ The token assigned to this lexeme
+    , lexemePos  :: !Span   -- ^ The position of this lexeme in the source
+    , lexemeText :: !T.Text -- ^ The actual text of this lexeme
+    } deriving (Eq, Ord, Show)
 
-instance Regioned (Lexeme tok) where
+-- | The region occupied by a 'Lexeme' is the region of the underlying
+-- 'lexemePos'.
+instance Regioned (Lexeme token) where
     regionLeft  = regionLeft . lexemePos
     regionRight = regionRight . lexemePos
