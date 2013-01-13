@@ -1,6 +1,6 @@
 -- |
 -- Module      :  Data.DFA.Elisp
--- Copyright   :  Robert Atkey 2012
+-- Copyright   :  (C) Robert Atkey 2013
 -- License     :  BSD3
 --
 -- Maintainer  :  bob.atkey@gmail.com
