@@ -15,7 +15,16 @@ module Data.NFA
     ( -- * Nondeterministic Finite Automata
       NFA ()
 
-      -- * Construction of NFAs via a monadic interface
+      -- * Combinators for building NFAs
+    , epsilon
+    , (.>>.)
+    , token
+    , empty
+    , choice
+    , zeroOrMore
+    , oneOrMore
+
+      -- * State-based construction of NFAs via a monadic interface
       -- $constructionexample
     , NFAConstruction
     , St ()
@@ -34,7 +43,7 @@ import           Data.BooleanAlgebra (or)
 import           Data.Functor ((<$>))
 import qualified Data.RangeSet as RS
 import qualified Data.IntSet as IS
-import qualified Data.IntMap as IM
+import qualified Data.IntMap.Strict as IM
 import qualified Data.Map as M
 import qualified Data.Set as S
 
@@ -43,15 +52,120 @@ import qualified Data.Set as S
 -- @alphabet@, and accepting states are labelled with values of type
 -- @result@.
 data NFA alphabet result = NFA
-    { nfaInputTransitions   :: IM.IntMap (M.Map alphabet IS.IntSet)
-    , nfaEpsilonTransitions :: IM.IntMap IS.IntSet
-    , nfaAcceptingStates    :: IM.IntMap result
+    { nfaInputTransitions   :: !(IM.IntMap (M.Map alphabet IS.IntSet))
+    , nfaEpsilonTransitions :: !(IM.IntMap IS.IntSet)
+    , nfaAcceptingStates    :: !(IM.IntMap result)
+    , nfaInitialState       :: !Int
+    , nfaNumberOfStates     :: !Int -- FIXME: this assumes that the states are numbered consecutively
     } deriving (Show, Eq, Ord)
 
 -- | Modification of result values.
 instance Functor (NFA alphabet) where
     fmap f nfa =
         nfa { nfaAcceptingStates = fmap f (nfaAcceptingStates nfa) }
+
+--------------------------------------------------------------------------------
+epsilon :: NFA alphabet ()
+epsilon = NFA
+  { nfaInputTransitions   = IM.empty
+  , nfaEpsilonTransitions = IM.empty
+  , nfaAcceptingStates    = IM.singleton 0 ()
+  , nfaInitialState       = 0
+  , nfaNumberOfStates     = 1
+  }
+
+empty :: NFA alphabet result
+empty = NFA
+  { nfaInputTransitions   = IM.empty
+  , nfaEpsilonTransitions = IM.empty
+  , nfaAcceptingStates    = IM.empty
+  , nfaInitialState       = 0
+  , nfaNumberOfStates     = 1
+  }
+
+choice :: NFA alphabet result
+       -> NFA alphabet result
+       -> NFA alphabet result
+choice nfa1 nfa2 = NFA
+  { nfaInputTransitions =
+    IM.unions [ nfaInputTransitions nfa1
+              , IM.mapKeysMonotonic adjustState (fmap adjustStateSet <$> nfaInputTransitions nfa2)
+              ]
+  , nfaEpsilonTransitions =
+    IM.unions [ nfaEpsilonTransitions nfa1
+              , IM.mapKeysMonotonic adjustState (adjustStateSet <$> nfaEpsilonTransitions nfa2)
+              , IM.singleton newInitialState (IS.fromList [ nfaInitialState nfa1
+                                                          , adjustState (nfaInitialState nfa2)
+                                                          ])
+              ]
+  , nfaAcceptingStates =
+    IM.union (nfaAcceptingStates nfa1)
+             (IM.mapKeysMonotonic adjustState (nfaAcceptingStates nfa2))
+  , nfaInitialState = newInitialState
+  , nfaNumberOfStates = nfaNumberOfStates nfa1 + nfaNumberOfStates nfa2 + 1
+  } where
+    adjustState q = q + nfaNumberOfStates nfa1
+    adjustStateSet = IS.map adjustState
+    newInitialState = nfaNumberOfStates nfa1 + nfaNumberOfStates nfa2
+
+token :: alphabet
+      -> NFA alphabet ()
+token symbol = NFA
+  { nfaInputTransitions = IM.singleton 0 (M.singleton symbol (IS.singleton 1))
+  , nfaEpsilonTransitions = IM.empty
+  , nfaAcceptingStates = IM.singleton 1 ()
+  , nfaInitialState = 0
+  , nfaNumberOfStates = 2
+  }
+
+(.>>.) :: NFA alphabet ()
+       -> NFA alphabet result
+       -> NFA alphabet result
+nfa1 .>>. nfa2 = NFA
+  { nfaInputTransitions =
+    IM.unions [ nfaInputTransitions nfa1
+              , IM.mapKeysMonotonic adjustState (fmap adjustStateSet <$> nfaInputTransitions nfa2)
+              ]
+
+  , nfaEpsilonTransitions =
+    IM.unionsWith IS.union
+      [ nfaEpsilonTransitions nfa1
+      , IM.mapKeysMonotonic adjustState (adjustStateSet <$> nfaEpsilonTransitions nfa2)
+      , const (IS.singleton (adjustState (nfaInitialState nfa2))) <$> nfaAcceptingStates nfa1
+      ]
+
+  , nfaAcceptingStates =
+    IM.mapKeysMonotonic adjustState (nfaAcceptingStates nfa2)
+
+  , nfaInitialState = nfaInitialState nfa1
+
+  , nfaNumberOfStates = nfaNumberOfStates nfa1 + nfaNumberOfStates nfa2
+  } where
+    adjustState q = q + nfaNumberOfStates nfa1
+    adjustStateSet = IS.map adjustState
+
+oneOrMore :: NFA alphabet result
+          -> NFA alphabet result
+oneOrMore nfa = NFA
+  { nfaInputTransitions = nfaInputTransitions nfa
+
+  , nfaEpsilonTransitions =
+    IM.unionsWith IS.union
+      [ nfaEpsilonTransitions nfa
+      , const (IS.singleton (nfaInitialState nfa)) <$> nfaAcceptingStates nfa
+      ]
+
+  , nfaAcceptingStates = nfaAcceptingStates nfa
+
+  , nfaInitialState = nfaInitialState nfa
+
+  , nfaNumberOfStates = nfaNumberOfStates nfa
+  }
+
+zeroOrMore :: NFA alphabet ()
+           -> NFA alphabet ()
+zeroOrMore nfa =
+    epsilon `choice` oneOrMore nfa
 
 --------------------------------------------------------------------------------
 -- Construction of NFAs
@@ -93,8 +207,10 @@ instance MonadFix (NFAConstruction s alphabet result) where
 
 -- | Add a state to an under construction NFA.
 state :: Ord alphabet =>
-         [ (alphabet, St s) ] -- ^ State transitions on input tokens from the new state
-      -> [ St s ] -- ^ Epsilon transitions from the new state
+         [ (alphabet, St s) ]
+      -- ^ State transitions on input tokens from the new state
+      -> [ St s ]
+      -- ^ Epsilon transitions from the new state
       -> NFAConstruction s alphabet result (St s)
 state inputTrans epsTrans =
     NFAConstruction $ \nextState nfa ->
@@ -141,13 +257,16 @@ setAccepting (St q) result =
         , () )
 
 -- | Construct a concrete NFA from an 'NFAConstruction'.
-toNFA :: (forall s. NFAConstruction s alphabet result ())
+toNFA :: (forall s. NFAConstruction s alphabet result (St s))
       -> NFA alphabet result
 toNFA c = nfa
     where
-      emptyNFA = NFA IM.empty IM.empty IM.empty
+      -- The use of circularity here is a bit gratuitous, but is OK
+      -- because none of the operations on NFAConstruction observe the
+      -- initial state
+      emptyNFA = NFA IM.empty IM.empty IM.empty i numStates
 
-      (_, nfa, _) = unNFAConstruction c 0 emptyNFA
+      (numStates, nfa, St i) = unNFAConstruction c 0 emptyNFA
 
 --------------------------------------------------------------------------------
 epsilonTransition :: NFA a b -> Int -> IS.IntSet
@@ -178,13 +297,16 @@ possibleInputs nfa q =
 instance (Enum alphabet, Ord alphabet, Bounded alphabet, Monoid result) =>
          FiniteStateMachine (NFA alphabet result)
     where
+
     type State (NFA alphabet result)    = IS.IntSet
     type Alphabet (NFA alphabet result) = alphabet
     type Result (NFA alphabet result)   = result
 
-    initState nfa = closeUnderEpsilon nfa (IS.singleton 0)
+    initState nfa =
+        closeUnderEpsilon nfa (IS.singleton (nfaInitialState nfa))
 
-    advance nfa a stateSet = closeUnderEpsilon nfa newStateSet
+    advance nfa a stateSet =
+        closeUnderEpsilon nfa newStateSet
         where
           newStateSet =
               IS.unions $ map (inputTransition nfa a) $ IS.elems stateSet
