@@ -48,6 +48,7 @@ Library
                         Data.DFA.TH,
                         Data.DFA.Elisp,
                         Data.Regexp,
+                        Data.ThompsonAbstractMachine,
                         Data.MonadicStream,
                         Data.MonadicStream.IO,
                         Data.MonadicStream.Binary,
