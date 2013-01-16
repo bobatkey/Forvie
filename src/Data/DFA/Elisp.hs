@@ -83,5 +83,6 @@ makeTransitionFunctionCharTables prefix dfa =
                            
       flattenCSets = concat . mapMaybe flattenCSet 
           where
-            flattenCSet (cset, q) = do res <- mkResult q
-                                       return $ map (\(low,high) -> (low, high, res)) (ranges cset)
+            flattenCSet (cset, q) = do
+              res <- mkResult q
+              return $ map (\(low,high) -> (low, high, res)) (ranges cset)

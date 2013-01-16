@@ -42,15 +42,13 @@ module Data.DFA
 
       -- * Simulation
     , TransitionResult (..)
-    , transition
-
-    )
+    , transition )
     where
 
 import           Data.Foldable (foldMap)
 import           Data.Maybe (maybeToList)
-import qualified Data.Map as M
-import qualified Data.IntMap as IM
+import qualified Data.Map.Strict as M
+import qualified Data.IntMap.Strict as IM
 import qualified Data.IntSet as IS
 import           Data.Array (Array, array, (!))
 import           Data.RangeSet (TotalMap, ($@), domainPartition, makeTotalMapA)
@@ -65,40 +63,41 @@ import           Control.FiniteStateMachine
 -- The states of a DFA are represented as 'Int' values in the range
 -- '[0..n]', where 'n' is the number of states of the
 -- automaton. State '0' is always the initial state.
-data DFA a b = DFA
+data DFA alphabet result = DFA
     { -- | Transition functions of the DFA, indexed by state number.
-      transitions :: !(Array Int (TotalMap a Int))
+      transitions :: !(Array Int (TotalMap alphabet Int))
     -- | The set of error states. Transitions from states in this set
     -- will always lead back to this set, and never to an accepting
     -- state.
     , errorStates :: !IS.IntSet
     -- | The set of accepting states, with attached values.
-    , acceptingStates :: !(IM.IntMap b)
+    , acceptingStates :: !(IM.IntMap result)
     } deriving (Eq, Show)
 
 -- | DFAs are finite state machines.
-instance (Enum a, Bounded a, Ord a) => FiniteStateMachine (DFA a b) where
-    type State (DFA a b)    = Int
-    type Alphabet (DFA a b) = a
-    type Result (DFA a b)   = b
+instance (Enum alphabet, Bounded alphabet, Ord alphabet) =>
+    FiniteStateMachine (DFA alphabet result) where
+    type State (DFA alphabet result)    = Int
+    type Alphabet (DFA alphabet result) = alphabet
+    type Result (DFA alphabet result)   = result
     initState dfa = 0
     advance dfa a q = (transitions dfa ! q) $@ a
     isAcceptingState dfa q = IM.lookup q (acceptingStates dfa)
     classes dfa q = domainPartition (transitions dfa ! q)
 
 -- | Transform the result values of a DFA.
-instance Functor (DFA a) where
+instance Functor (DFA alphabet) where
     fmap f dfa =
         dfa { acceptingStates = fmap f (acceptingStates dfa) }
 
 {------------------------------------------------------------------------------}
 -- DFA construction
-data ConstructionState re
-    = CS { csVisited     :: !(M.Map (State re) Int)
+data ConstructionState fsm
+    = CS { csVisited     :: !(M.Map (State fsm) Int)
          , csNextState   :: !Int
-         , csTransitions :: !(IM.IntMap (TotalMap (Alphabet re) Int))
+         , csTransitions :: !(IM.IntMap (TotalMap (Alphabet fsm) Int))
          , csBackEdges   :: !(IM.IntMap [Int])
-         , csAccepting   :: !(IM.IntMap (Result re))
+         , csAccepting   :: !(IM.IntMap (Result fsm))
          }
 
 type ConstructionM re a = S.State (ConstructionState re) a
