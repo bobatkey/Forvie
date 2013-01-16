@@ -29,7 +29,7 @@ module Data.RangeSet
     , interval
       
     -- ** Queries
-    , memberOf
+    , member
     , getRepresentative
     , null
     , ranges
@@ -103,8 +103,8 @@ empty :: Set a
 empty = Set []
 
 -- | Test to determine whether the given @a@ is in the 'Set'.
-memberOf :: Ord a => a -> Set a -> Bool
-memberOf c (Set l) = aux c l
+member :: Ord a => a -> Set a -> Bool
+member c (Set l) = aux c l
     where
       -- FIXME: could shortcut search if i > c.
       aux c []        = False
@@ -232,7 +232,7 @@ domainPartition = Partition . S.fromList . map fst . unTotalMap
 TotalMap mappings $@ a = go mappings
     where
       go []        = error "internal error: not a total map"
-      go ((s,b):m) = if a `memberOf` s then b else go m
+      go ((s,b):m) = if a `member` s then b else go m
 
 -- | Returns the list of equivalence classes over the domain and their
 -- associated codomain values.

@@ -105,8 +105,8 @@ diffN c (NSeq ns)  = diffNs ns
           | otherwise       = diffN c n `nSeq` NSeq ns
 diffN c (NAlt ns)  = any (diffN c) ns
 diffN c (NTok cl)
-    | c `memberOf` cl = nEps
-    | otherwise       = nZero
+    | c `member` cl = nEps
+    | otherwise     = nZero
 diffN c (NStar ns) = diffN c ns `nSeq` NStar ns
 diffN c (NAnd ns)  = all (diffN c) ns
 diffN c (NNot n)   = NNot (diffN c n)

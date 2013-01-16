@@ -58,7 +58,7 @@ instance (Ord a, Bounded a, Enum a, Arbitrary a) => Arbitrary (Set a) where
 prop_interval :: (Random a, Ord a) => a -> a -> Property
 prop_interval a b = do
   c <- choose (a,b)
-  property (c `memberOf` (interval a b))
+  property (c `member` (interval a b))
 
 prop_ranges :: (Bounded a, Enum a, Ord a) =>
                Set a ->
@@ -67,12 +67,12 @@ prop_ranges a =
     (foldl (.|.) zero . map (uncurry interval) . ranges) a == a
 
 prop_singleton :: Ord a => a -> Bool
-prop_singleton a = a `memberOf` (singleton a)
+prop_singleton a = a `member` (singleton a)
 
 prop_representative :: Ord a => Set a -> Property
 prop_representative s = 
     not (null s) ==>
-    (fromJust $ getRepresentative s) `memberOf` s
+    (fromJust $ getRepresentative s) `member` s
 
 --------------------------------------------------------------------------------
 {-
