@@ -48,7 +48,7 @@ data Regexp alphabet
 instance IsString (Regexp Char) where
     fromString s = NSeq $ map (NTok . singleton) s
 
--- | Regular expressions form a boolean algebra.
+-- | Regular expressions form alphabet boolean algebra.
 instance Ord alphabet => BooleanAlgebra (Regexp alphabet) where
     (.&.)      = nAnd
     (.|.)      = nAlt
@@ -65,17 +65,18 @@ instance Monoid (Regexp alphabet) where
 {------------------------------------------------------------------------------}
 -- | Regular expressions are directly finite state machines via
 -- Brzozowski derivatives.
-instance (Ord a, Enum a, Bounded a) => FiniteStateMachine (Regexp a) where
-    type State    (Regexp a) = Regexp a
-    type Alphabet (Regexp a) = a
-    type Result   (Regexp a) = ()
+instance (Ord alphabet, Enum alphabet, Bounded alphabet) =>
+    FiniteStateMachine (Regexp alphabet) where
+    type State    (Regexp alphabet) = Regexp alphabet
+    type Alphabet (Regexp alphabet) = alphabet
+    type Result   (Regexp alphabet) = ()
     initState r        = r
     advance _ c        = diffN c
     isAcceptingState _ = guard . matchesEmptyN
     classes _          = classesN
 
 {------------------------------------------------------------------------------}
-matchesEmptyN :: Regexp a -> Bool
+matchesEmptyN :: Regexp alphabet -> Bool
 matchesEmptyN (NSeq ns) = all matchesEmptyN ns
 matchesEmptyN (NAlt ns) = any matchesEmptyN ns
 matchesEmptyN (NTok c)  = False
@@ -83,7 +84,9 @@ matchesEmptyN (NStar _) = True
 matchesEmptyN (NNot n)  = not (matchesEmptyN n)
 matchesEmptyN (NAnd ns) = all matchesEmptyN ns
 
-classesN :: (Enum a, Bounded a, Ord a) => Regexp a -> Partition a
+classesN :: (Enum alphabet, Bounded alphabet, Ord alphabet) =>
+            Regexp alphabet
+         -> Partition alphabet
 classesN (NSeq ns) = classesNs ns
     where
       classesNs []          = fromSet one
@@ -96,7 +99,7 @@ classesN (NStar n) = classesN n
 classesN (NAnd ns) = foldMap classesN ns
 classesN (NNot n)  = classesN n
 
-diffN :: Ord a => a -> Regexp a -> Regexp a
+diffN :: Ord alphabet => alphabet -> Regexp alphabet -> Regexp alphabet
 diffN c (NSeq ns)  = diffNs ns
     where
       diffNs []     = nZero
@@ -114,47 +117,49 @@ diffN c (NNot n)   = NNot (diffN c n)
 
 {------------------------------------------------------------------------------}
 -- | Sequential sequencing of regular expressions.
-(.>>.) :: Regexp a -> Regexp a -> Regexp a
+(.>>.) :: Regexp alphabet -> Regexp alphabet -> Regexp alphabet
 (.>>.) = nSeq
 
 -- | @star re@ matches zero or more repetitions of @re@. Synonym of
 -- 'zeroOrMore'.
-star :: Regexp a -> Regexp a
+star :: Regexp alphabet -> Regexp alphabet
 star n = NStar n
 
 -- | @zeroOrMore re@ matches zero or more repetitions of @re@. Synonym
 -- of 'star'.
-zeroOrMore :: Regexp a -> Regexp a
+zeroOrMore :: Regexp alphabet -> Regexp alphabet
 zeroOrMore = star
 
 -- | @oneOrMore re@ matches one or more repetitions of
 -- @re@. Equivalent to @re .>>. star re@.
-oneOrMore :: Regexp a -> Regexp a
+oneOrMore :: Regexp alphabet -> Regexp alphabet
 oneOrMore n = n .>>. star n
 
 -- | A regular expression that accepts a single token from the given
 -- set of tokens.
-tok :: Set a -> Regexp a
+tok :: Set alphabet -> Regexp alphabet
 tok cs = NTok cs
 
-nEps :: Regexp a
+nEps :: Regexp alphabet
 nEps  = NSeq []
 
-nZero :: Regexp a
+nZero :: Regexp alphabet
 nZero = NAlt S.empty
 
-nTop :: Regexp a
+nTop :: Regexp alphabet
 nTop  = NNot nZero
 
-isBottom :: Regexp a -> Bool
+isBottom :: Regexp alphabet -> Bool
 isBottom (NAlt s) = S.null s
 isBottom _        = False
 
-isTop :: Regexp a -> Bool
+isTop :: Regexp alphabet -> Bool
 isTop (NNot x) = isBottom x
 isTop _        = False
 
-nSeq :: Regexp a -> Regexp a -> Regexp a
+nSeq :: Regexp alphabet
+     -> Regexp alphabet
+     -> Regexp alphabet
 nSeq (NSeq x) (NSeq y) = NSeq (x ++ y)
 nSeq x        (NSeq y)
     | isBottom x       = nZero
@@ -167,7 +172,10 @@ nSeq x          y
     | isBottom y       = nZero
     | otherwise        = NSeq [x,y]
 
-nAlt :: Ord a => Regexp a -> Regexp a -> Regexp a
+nAlt :: Ord alphabet =>
+        Regexp alphabet
+     -> Regexp alphabet
+     -> Regexp alphabet
 nAlt (NAlt x) (NAlt y) = NAlt (S.union x y)
 nAlt x        (NAlt y) 
     | isTop x          = NNot nZero
@@ -184,7 +192,10 @@ nAlt x        y
 -- construction algorithm (need the ones for 'and' as well as
 -- 'or'. This is not mentioned in the Owens et al paper, but they
 -- implement it anyway).
-nAnd :: Ord a => Regexp a -> Regexp a -> Regexp a
+nAnd :: Ord alphabet =>
+        Regexp alphabet
+     -> Regexp alphabet
+     -> Regexp alphabet
 nAnd (NAnd x) (NAnd y) = NAnd (S.union x y)
 nAnd x        (NAnd y) 
     | isTop x          = NAnd y
