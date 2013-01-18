@@ -14,14 +14,16 @@
 -- features:
 --
 -- * When reaching an accepting state, a value may be returned. See
--- the isAcceptingState function.
+-- the 'isAcceptingState' function.
 --
 -- * Very large alphabets (e.g., unicode) are supported by means of
--- the classes function.
+-- the 'classes' function.
 
 module Control.FiniteStateMachine
-    ( FiniteStateMachine (..)
+    ( -- * Finite State Machines: definition and simulation
+      FiniteStateMachine (..)
     , runFSM
+      -- * Combinators for 'FiniteStateMachine's
     , (:==>) (..)
     , Literal (..)
     )
