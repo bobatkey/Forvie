@@ -1,5 +1,5 @@
 -- |
--- Module      :  Data.DFA.Elisp
+-- Module      :  Data.FiniteStateMachine.Deterministic.Elisp
 -- Copyright   :  (C) Robert Atkey 2013
 -- License     :  BSD3
 --
@@ -8,7 +8,7 @@
 -- Portability :  unknown
 --
 
-module Data.DFA.Elisp
+module Data.FiniteStateMachine.Deterministic.Elisp
     ( makeTransitionFunctionCharTables )
     where
 
@@ -20,7 +20,7 @@ import qualified Data.RangeSet as RS
 import           Data.Char (ord)
 import           Data.Maybe (mapMaybe)
 import           Data.SExpr
-import           Data.DFA
+import           Data.FiniteStateMachine.Deterministic
 
 -- | Turn the DFA into a collection of 'char-table's, one for each
 -- state, plus a vector containing all these char-tables

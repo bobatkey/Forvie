@@ -1,13 +1,15 @@
 {-# LANGUAGE TemplateHaskell, ScopedTypeVariables #-}
 
-module Data.DFA.TH
+-- FIXME: haddock header
+
+module Data.FiniteStateMachine.Deterministic.TH
     (makeTransitionFunction)
     where
 
 import qualified Data.IntMap as IM
 import qualified Data.IntSet as IS
 import           Data.Array (assocs)
-import           Data.DFA (DFA (..), TransitionResult (..))
+import           Data.FiniteStateMachine.Deterministic (DFA (..), TransitionResult (..))
 import           Data.RangeSet hiding (assocs)
 import qualified Data.RangeSet as RS
 import           Language.Haskell.TH

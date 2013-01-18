@@ -18,7 +18,7 @@ module Language.Forvie.Lexing.ByteString
 import           Prelude hiding (lex)
 import           Data.MonadicStream (Stream (..), StreamStep (..))
 import           Data.Word (Word8)
-import qualified Data.DFA as DFA
+import qualified Data.FiniteStateMachine.Deterministic as DFA
 import qualified Data.ByteString as B
 import qualified Data.ByteString.Unsafe as BU
 

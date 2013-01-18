@@ -13,11 +13,10 @@ import           Test.Framework.Providers.QuickCheck2 (testProperty)
 import           Test.Framework.Providers.HUnit (testCase)
 import           Test.QuickCheck hiding (ranges, Result)
 
-import           Control.FiniteStateMachine
-import           Data.BooleanAlgebra
 import           Data.RangeSet
-import           Data.Regexp
-import           Data.DFA
+import           Data.FiniteStateMachine
+import           Data.FiniteStateMachine.Deterministic
+import           Data.FiniteStateMachine.RegexpDerivatives
 
 import           Layout
 import           LayoutHUnit

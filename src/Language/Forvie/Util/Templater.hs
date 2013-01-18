@@ -6,7 +6,7 @@ import           Data.Char (ord)
 import           Data.Word (Word8)
 import qualified Data.Map as M
 import qualified Data.RangeSet as RS
-import qualified Data.DFA as DFA
+import qualified Data.FiniteStateMachine.Deterministic as DFA
 import qualified Data.ByteString as B
 import           Data.MonadicStream ((|>|), foldl)
 import           Language.Forvie.Lexing.Spec

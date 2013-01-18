@@ -19,7 +19,7 @@ import           Prelude hiding (lex)
 import           Data.ByteString (ByteString)
 import qualified Data.Text as T
 import           Data.MonadicStream (Stream (..), StreamStep (..))
-import qualified Data.DFA as DFA
+import qualified Data.FiniteStateMachine.Deterministic as DFA
 import           Language.Forvie.Lexing.Spec (CompiledLexSpec (..))
 import           Text.Lexeme (Lexeme (..))
 import           Text.Position (Span (Span), initPos, updatePos, Position)

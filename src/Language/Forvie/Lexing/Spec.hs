@@ -34,7 +34,7 @@ module Language.Forvie.Lexing.Spec
     -- provides a 'Data.IsString' instance, which can be used with the
     -- @OverloadedStrings@ pragma to make specifications easier to
     -- read and write.
-    , module Data.Regexp
+    , module Data.FiniteStateMachine.RegexpDerivatives
 
     -- | The "Data.CharSet" module provides several useful predefined
     -- sets of characters for use in 'LexicalSpecification's.
@@ -53,9 +53,9 @@ module Language.Forvie.Lexing.Spec
     where
 
 import           Language.Haskell.TH.Syntax
-import           Control.FiniteStateMachine
-import qualified Data.DFA as DFA
-import           Data.Regexp
+import           Data.FiniteStateMachine
+import qualified Data.FiniteStateMachine.Deterministic as DFA
+import           Data.FiniteStateMachine.RegexpDerivatives
 import           Data.CharSet
 
 -- $example

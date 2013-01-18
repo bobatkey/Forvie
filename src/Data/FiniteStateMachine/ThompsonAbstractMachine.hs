@@ -1,6 +1,8 @@
 {-# LANGUAGE TypeFamilies #-}
 
-module Data.ThompsonAbstractMachine
+-- FIXME: haddock header
+
+module Data.FiniteStateMachine.ThompsonAbstractMachine
     ( Regexp (..)
     , compile
 
@@ -15,7 +17,7 @@ module Data.ThompsonAbstractMachine
     , execute )
     where
 
-import           Control.FiniteStateMachine (FiniteStateMachine (..))
+import           Data.FiniteStateMachine (FiniteStateMachine (..))
 import qualified Data.RangeSet as RS
 import           Data.Array (listArray, (!), Array, bounds, array)
 import           Data.Monoid (mconcat)

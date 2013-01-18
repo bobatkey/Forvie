@@ -1,7 +1,7 @@
 {-# LANGUAGE TypeFamilies, FlexibleInstances, FlexibleContexts, TypeOperators #-}
 
 -- |
--- Module           :  Data.DFA
+-- Module           :  Data.FiniteStateMachine.Deterministic
 -- Copyright        :  (C) Robert Atkey 2013
 -- License          :  BSD3
 --
@@ -33,7 +33,7 @@
 -- FIXME: write more about the difference between 'DFA's and
 -- 'FiniteStateMachine's.
 
-module Data.DFA
+module Data.FiniteStateMachine.Deterministic
     ( -- * Representation
       DFA (..)
       
@@ -55,7 +55,7 @@ import           Data.RangeSet (TotalMap, ($@), domainPartition, makeTotalMapA)
 import qualified Control.Monad.State as S
 import           Control.Monad.State (modify, gets, execState, join, unless)
 import           Data.Functor ((<$>))
-import           Control.FiniteStateMachine
+import           Data.FiniteStateMachine
 
 -- | The 'DFA' type has two parameters, the type of input tokens 'a'
 -- and the type @b@ of output values attached to accepting states. FIXME: rewrite this to mention 'deterministic finite automaton'

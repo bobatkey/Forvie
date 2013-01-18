@@ -1,7 +1,7 @@
 {-# LANGUAGE TypeFamilies, RankNTypes #-}
 
 -- |
--- Module          :  Data.NFA
+-- Module          :  Data.FiniteStateMachine.Nondeterministic
 -- Copyright       :  (C) Robert Atkey 2013
 -- License         :  BSD3
 --
@@ -11,7 +11,7 @@
 --
 -- Nondeterministic finite automata.
 
-module Data.NFA
+module Data.FiniteStateMachine.Nondeterministic
     ( -- * Nondeterministic Finite Automata
       NFA ()
 
@@ -34,11 +34,11 @@ module Data.NFA
     where
 
 import           Prelude hiding (or)
+import           Control.Monad.Fix (MonadFix (..))
 import           Data.Monoid (Monoid (..))
 import           Data.Foldable (fold, foldMap)
 import           Data.Maybe (fromMaybe)
-import           Control.FiniteStateMachine (FiniteStateMachine (..))
-import           Control.Monad.Fix (MonadFix (..))
+import           Data.FiniteStateMachine (FiniteStateMachine (..))
 import           Data.BooleanAlgebra (or)
 import           Data.Functor ((<$>))
 import qualified Data.RangeSet as RS

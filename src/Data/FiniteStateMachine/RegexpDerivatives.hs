@@ -1,7 +1,7 @@
 {-# LANGUAGE TypeFamilies, FlexibleInstances #-}
 
 -- |
--- Module          :  Data.Regexp
+-- Module          :  Data.FiniteStateMachine.RegexpDerivatives
 -- Copyright       :  (C) Robert Atkey 2013
 -- License         :  BSD3
 --
@@ -11,7 +11,7 @@
 --
 -- Regular expressions over an arbitrary bounded alphabet.
 
-module Data.Regexp
+module Data.FiniteStateMachine.RegexpDerivatives
     ( Regexp ()
     , (.>>.)
     , star
@@ -30,7 +30,7 @@ import           Data.BooleanAlgebra
 import           Data.Foldable hiding (foldr, all, any)
 import           Data.String (IsString (..))
 import           Data.RangeSet
-import           Control.FiniteStateMachine
+import           Data.FiniteStateMachine (FiniteStateMachine (..))
 import           Control.Monad (guard)
 
 -- | Regular expressions over an arbitrary alphabet.

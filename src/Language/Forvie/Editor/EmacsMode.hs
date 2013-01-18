@@ -8,7 +8,7 @@ import           Paths_forvie
 import           System.IO (stdout)
 import           Data.SExpr (SExpr (..), pprint)
 import           Text.PrettyPrint (render)
-import           Data.DFA.Elisp (makeTransitionFunctionCharTables)
+import           Data.FiniteStateMachine.Deterministic.Elisp (makeTransitionFunctionCharTables)
 import           Language.Forvie.Lexing.Spec (CompiledLexSpec (..), Classification (..), SyntaxHighlight (..))
 import           Language.Forvie.Util.Templater
 import qualified Data.ByteString as B

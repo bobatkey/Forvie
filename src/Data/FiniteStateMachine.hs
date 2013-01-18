@@ -19,7 +19,7 @@
 -- * Very large alphabets (e.g., unicode) are supported by means of
 -- the 'classes' function.
 
-module Control.FiniteStateMachine
+module Data.FiniteStateMachine
     ( -- * Finite State Machines: definition and simulation
       FiniteStateMachine (..)
     , runFSM
