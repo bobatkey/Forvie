@@ -23,10 +23,12 @@ module Control.FiniteStateMachine
     ( FiniteStateMachine (..)
     , runFSM
     , (:==>) (..)
+    , Literal (..)
     )
     where
 
-import Data.RangeSet (Partition)
+import Data.RangeSet (Partition, fromSet, singleton)
+import Data.Monoid (mempty)
 import Data.Maybe (listToMaybe, mapMaybe)
 import Data.Foldable (foldMap)
 import Data.Functor ((<$>))
@@ -103,7 +105,36 @@ instance FiniteStateMachine r => FiniteStateMachine (r :==> a) where
      isAcceptingState (r :==> a) s = const a <$> isAcceptingState r s
      classes (r :==> a) s = classes r s
 
+--------------------------------------------------------------------------------
+-- | Treat a list of items as a 'FiniteStateMachine'. As a
+-- 'FiniteStateMachine', @Literal l@ accepts exactly the list of
+-- symbols @l@.
+newtype Literal a = Literal [a]
 
+-- | Treat a list of items as a 'FiniteStateMachine'. As a
+-- 'FiniteStateMachine', @Literal l@ accepts exactly the list of
+-- symbols @l@.
+instance (Bounded a, Enum a, Ord a) => FiniteStateMachine (Literal a) where
+    type State (Literal a)    = Maybe [a]
+    type Alphabet (Literal a) = a
+    type Result (Literal a)   = ()
+
+    initState (Literal l) = Just l
+
+    advance _ c Nothing   = Nothing
+    advance _ c (Just []) = Nothing
+    advance _ c (Just (c':cs))
+        | c == c'   = Just cs
+        | otherwise = Nothing
+
+    isAcceptingState _ (Just []) = Just ()
+    isAcceptingState _ _         = Nothing
+
+    classes _ Nothing      = mempty
+    classes _ (Just [])    = mempty
+    classes _ (Just (c:_)) = fromSet (singleton c)
+
+--------------------------------------------------------------------------------
 -- | Simulate a finite state machine on an input sequence. The input
 -- sequence should be finite.
 runFSM :: FiniteStateMachine fsm =>
