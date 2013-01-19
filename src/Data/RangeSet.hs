@@ -1,4 +1,4 @@
-{-# LANGUAGE OverloadedStrings, FlexibleInstances, TupleSections #-}
+{-# LANGUAGE OverloadedStrings, FlexibleInstances, TupleSections, DeriveFunctor #-}
 
 -- |
 -- Module      :  Data.RangeSet
@@ -194,13 +194,14 @@ instance (Enum a, Bounded a, Ord a) => Monoid (Partition a) where
                                , not (null i)] 
 
 --------------------------------------------------------------------------------
--- FIXME: need a better representation than this
--- Should be a balanced tree
+-- FIXME: need a better representation than this Should be a balanced
+-- tree. Also the Eq/Ord instances should equate extensionally equal
+-- total maps.
 
 -- | A total map from @a@ to @b@, represented using a partition of the
 -- domain into equivalence classes.
 newtype TotalMap a b = TotalMap { unTotalMap :: [(Set a,b)] }
-    deriving (Eq, Ord, Show)
+    deriving (Eq, Ord, Show, Functor)
 
 -- | Construct a 'TotalMap' by providing a function to 
 makeTotalMap :: (a -> b)
