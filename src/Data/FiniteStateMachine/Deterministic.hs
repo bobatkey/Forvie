@@ -1,4 +1,4 @@
-{-# LANGUAGE TypeFamilies, FlexibleInstances, FlexibleContexts, TypeOperators #-}
+{-# LANGUAGE TypeFamilies, FlexibleInstances, FlexibleContexts, RankNTypes, DoRec #-}
 
 -- |
 -- Module           :  Data.FiniteStateMachine.Deterministic
@@ -35,10 +35,19 @@
 
 module Data.FiniteStateMachine.Deterministic
     ( -- * Representation
-      DFA (..)
+      DFA
+    , initialState
+    , transitions
+    , errorStates
+    , acceptingStates
       
-      -- * Construction
-    , makeDFA
+      -- * Constructon of 'DFA's
+    , DFAConstruction ()
+    , toDFA
+    , addState
+    , addFinalState
+    , fromFSM
+    , dfaOfFSM
 
       -- * Simulation
     , TransitionResult (..)
@@ -47,25 +56,30 @@ module Data.FiniteStateMachine.Deterministic
 
 import           Data.Foldable (foldMap)
 import           Data.Maybe (maybeToList)
-import qualified Data.Map.Strict as M
+import qualified Data.Map as M
 import qualified Data.IntMap.Strict as IM
 import qualified Data.IntSet as IS
 import           Data.Array (Array, array, (!))
-import           Data.RangeSet (TotalMap, ($@), domainPartition, makeTotalMapA)
+import           Data.RangeSet (TotalMap, ($@), domainPartition, makeTotalMapA, assocs)
+import           Control.Applicative
+import           Control.Monad.Fix (MonadFix (..))
 import qualified Control.Monad.State as S
-import           Control.Monad.State (modify, gets, execState, join, unless)
-import           Data.Functor ((<$>))
-import           Data.FiniteStateMachine
+import           Control.Monad.State (modify, gets, execState, join, unless, lift, ap)
+import           Data.FiniteStateMachine (FiniteStateMachine (..))
 
 -- | The 'DFA' type has two parameters, the type of input tokens 'a'
--- and the type @b@ of output values attached to accepting states. FIXME: rewrite this to mention 'deterministic finite automaton'
+-- and the type @b@ of output values attached to accepting
+-- states. FIXME: rewrite this to mention 'deterministic finite
+-- automaton'
 --
 -- The states of a DFA are represented as 'Int' values in the range
 -- '[0..n]', where 'n' is the number of states of the
 -- automaton. State '0' is always the initial state.
 data DFA alphabet result = DFA
-    { -- | Transition functions of the DFA, indexed by state number.
-      transitions :: !(Array Int (TotalMap alphabet Int))
+    { -- | Initial state number
+      initialState   :: !Int
+    -- | Transition functions of the DFA, indexed by state number.
+    , transitions :: !(Array Int (TotalMap alphabet Int))
     -- | The set of error states. Transitions from states in this set
     -- will always lead back to this set, and never to an accepting
     -- state.
@@ -81,7 +95,8 @@ instance (Enum alphabet, Bounded alphabet, Ord alphabet) =>
         DFAState { unDFAState :: Int } deriving (Eq, Ord)
     type Alphabet (DFA alphabet result) = alphabet
     type Result (DFA alphabet result)   = result
-    initState dfa = DFAState 0
+
+    initState dfa = DFAState (initialState dfa)
 
     advance dfa a q = DFAState $ (transitions dfa ! unDFAState q) $@ a
 
@@ -95,68 +110,36 @@ instance Functor (DFA alphabet) where
         dfa { acceptingStates = fmap f (acceptingStates dfa) }
 
 {------------------------------------------------------------------------------}
--- DFA construction
-data ConstructionState fsm
-    = CS { csVisited     :: !(M.Map (State fsm) Int)
-         , csNextState   :: !Int
-         , csTransitions :: !(IM.IntMap (TotalMap (Alphabet fsm) Int))
-         , csBackEdges   :: !(IM.IntMap [Int])
-         , csAccepting   :: !(IM.IntMap (Result fsm))
-         }
+data PartialDFA alphabet result = PartialDFA
+    { partNextState   :: !Int
+    , partTransitions :: (IM.IntMap (TotalMap alphabet Int))
+    , partAccepting   :: !(IM.IntMap result)
+    , partBackEdges   :: (IM.IntMap [Int])
+    }
 
-type ConstructionM re a = S.State (ConstructionState re) a
+initialPartialDFA :: PartialDFA alphabet result
+initialPartialDFA = PartialDFA 0 IM.empty IM.empty IM.empty
 
-haveVisited :: Ord (State fsm) =>
-               State fsm
-            -> ConstructionM fsm (Maybe Int)
-haveVisited q = gets (M.lookup q . csVisited)
+partialDFAToDFA :: PartialDFA alphabet result
+                -> Int
+                -> DFA alphabet result
+partialDFAToDFA partialDFA initState =
+    DFA initState transitions errorStates acceptingStates
+    where
+      maxState =
+          partNextState partialDFA-1
 
-setTransitions :: FiniteStateMachine fsm =>
-                  Int
-               -> TotalMap (Alphabet fsm) Int
-               -> ConstructionM fsm ()
-setTransitions src map =
-    modify $ \s -> s { csTransitions = IM.insert src map (csTransitions s) }
+      transitions =
+          array (0, maxState) (IM.assocs (partTransitions partialDFA))
 
-addBackEdge :: Int
-            -> Int
-            -> ConstructionM fsm ()
-addBackEdge tgt src = do
-  srcs <- (join . maybeToList . IM.lookup tgt) <$> gets csBackEdges
-  modify $ \cs -> cs { csBackEdges = IM.insert tgt (src:srcs) (csBackEdges cs) }
+      acceptingStates =
+          partAccepting partialDFA
 
-newState :: FiniteStateMachine fsm =>
-            fsm
-         -> State fsm
-         -> ConstructionM fsm Int
-newState r st = do
-  q <- gets csNextState
-  modify $ \cs -> cs { csNextState = csNextState cs + 1
-                     , csVisited   = M.insert st q (csVisited cs)
-                     , csAccepting = case isAcceptingState r st of
-                                       Nothing -> csAccepting cs
-                                       Just x  -> IM.insert q x (csAccepting cs)
-                     }
-  return q
+      acceptingReaching =
+          findAllReachable (partBackEdges partialDFA) (IM.keys acceptingStates)
 
--- | Main DFA generation function.
-explore :: FiniteStateMachine fsm =>
-           fsm
-        -> State fsm
-        -> ConstructionM fsm Int
-explore r q = do
-  visited <- haveVisited q
-  case visited of
-    Nothing -> do
-      s <- newState r q
-      let doClass c = do
-            s' <- explore r (advance r c q)
-            addBackEdge s' s
-            return s'
-      t <- makeTotalMapA doClass (classes r q)
-      setTransitions s t
-      return s
-    Just s -> return s
+      errorStates =
+          IS.fromList $ filter (\i -> not (IS.member i acceptingReaching)) [0..maxState]
 
 -- Determines the set of reachable states from a given state using the
 -- provided edges. This function is used to discover which states are
@@ -176,25 +159,110 @@ findReachable edges s = execState (go s) IS.empty
 findAllReachable :: IM.IntMap [Int] -> [Int] -> IS.IntSet
 findAllReachable edges = foldMap (findReachable edges)
 
--- | Construct a 'DFA' from a 'FiniteStateMachine'.
-makeDFA :: FiniteStateMachine fsm =>
-           fsm
-        -> DFA (Alphabet fsm) (Result fsm)
-makeDFA r = DFA transitions error final
+--------------------------------------------------------------------------------
+newtype DFAConstruction s alphabet result a = DFAConstruction
+    { unDFAConstruction :: PartialDFA alphabet result
+                        -> (PartialDFA alphabet result, a) }
+
+newtype St s = St { unSt :: Int }
+
+instance Functor (DFAConstruction s alphabet result) where
+    fmap = liftA
+
+instance Applicative (DFAConstruction s alphabet result) where
+    pure = return
+    (<*>) = ap
+
+instance Monad (DFAConstruction s alphabet result) where
+    return a =
+        DFAConstruction $ \pDFA -> (pDFA, a)
+    DFAConstruction c >>= f =
+        DFAConstruction $ \pDFA ->
+            let (pDFA', a) = c pDFA
+            in unDFAConstruction (f a) pDFA'
+
+instance MonadFix (DFAConstruction s alphabet result) where
+    mfix f =
+        DFAConstruction $ \pDFA ->
+            let (pDFA', a) = unDFAConstruction (f a) pDFA
+            in (pDFA', a)
+
+insertBackEdges :: Int -> IM.IntMap [Int] -> [Int] -> IM.IntMap [Int]
+insertBackEdges src =
+    foldr (\tgt -> IM.insertWith (++) tgt [src])
+
+addStateInternal :: Ord alphabet =>
+                    Maybe result
+                 -> TotalMap alphabet (St s)
+                 -> DFAConstruction s alphabet result (St s)
+addStateInternal maybeResult transitions =
+    DFAConstruction $ \pDFA ->
+        let thisState = partNextState pDFA
+        in ( pDFA { partNextState = thisState+1
+                  , partTransitions =
+                    IM.insert thisState (unSt <$> transitions)
+                          (partTransitions pDFA)
+                  , partAccepting =
+                    case maybeResult of
+                      Nothing -> partAccepting pDFA
+                      Just result ->
+                          IM.insert thisState result
+                                (partAccepting pDFA)
+                  , partBackEdges =
+                    insertBackEdges thisState
+                          (partBackEdges pDFA)
+                          (map (unSt . snd) (assocs transitions))
+                  }
+           , St thisState )
+
+addState :: Ord alphabet =>
+            TotalMap alphabet (St s)
+         -> DFAConstruction s alphabet result (St s)
+addState = addStateInternal Nothing
+
+addFinalState :: Ord alphabet =>
+                 result
+              -> TotalMap alphabet (St s)
+              -> DFAConstruction s alphabet result (St s)
+addFinalState result = addStateInternal (Just result)
+
+toDFA :: (forall s. DFAConstruction s alphabet result (St s))
+      -> DFA alphabet result
+toDFA dfaConstruction = partialDFAToDFA partialDFA initState
     where
-      init = CS M.empty 0 IM.empty IM.empty IM.empty
+      (partialDFA, St initState) =
+          unDFAConstruction dfaConstruction initialPartialDFA
 
-      CS _ next trans backEdges final =
-          execState (explore r (initState r)) init
+{------------------------------------------------------------------------------}
+-- FIXME: support for rerouting the accepting states
+fromFSM :: FiniteStateMachine fsm =>
+           fsm
+        -> DFAConstruction s (Alphabet fsm) (Result fsm) (St s)
+fromFSM fsm = S.evalStateT (exploreFSM fsm (initState fsm)) M.empty
 
-      finalReaching =
-          findAllReachable backEdges (IM.keys final)
+type Explorer s fsm a =
+    S.StateT (M.Map (State fsm) (St s))
+             (DFAConstruction s (Alphabet fsm) (Result fsm))
+             a
 
-      error =
-          IS.fromList [ i | i <- [0..next-1], not (IS.member i finalReaching) ]
+exploreFSM :: FiniteStateMachine fsm =>
+              fsm
+           -> State fsm
+           -> Explorer s fsm (St s)
+exploreFSM fsm fsmState = do
+  visited <- gets (M.lookup fsmState)
+  case visited of
+    Just s -> return s
+    Nothing -> do
+        rec modify (M.insert fsmState s)
+            t <- makeTotalMapA (\c -> exploreFSM fsm (advance fsm c fsmState))
+                               (classes fsm fsmState)
+            s <- lift $ addStateInternal (isAcceptingState fsm fsmState) t
+        return s
 
-      transitions =
-          array (0,next-1) (IM.assocs trans)
+{------------------------------------------------------------------------------}
+dfaOfFSM :: FiniteStateMachine fsm => fsm -> DFA (Alphabet fsm) (Result fsm)
+dfaOfFSM fsm = toDFA (fromFSM fsm)
 
 {------------------------------------------------------------------------------}
 -- | Representation of the result of stepping a 'DFA'.
@@ -214,7 +282,7 @@ transition :: Ord a =>
            -> TransitionResult b -- ^ the result of this transition
 transition dfa state c = result
     where
-      DFA transitions errorStates acceptingStates = dfa
+      DFA _ transitions errorStates acceptingStates = dfa
       
       newState = (transitions ! state) $@ c
 

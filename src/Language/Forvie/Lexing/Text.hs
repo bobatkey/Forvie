@@ -89,7 +89,7 @@ lex lexSpec errorHandler sourceName text =
       beforeLexeme text =
           case uncons text of
             Nothing   -> return StreamEnd
-            Just step -> onChar 0 step (initLexeme text)
+            Just step -> onChar (DFA.initialState dfa) step (initLexeme text)
 
       inLexeme dfaState lexeme text =
           case uncons text of

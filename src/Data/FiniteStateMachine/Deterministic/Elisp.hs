@@ -7,6 +7,7 @@
 -- Stability   :  experimental
 -- Portability :  unknown
 --
+-- FIXME: document the elisp that is produced.
 
 module Data.FiniteStateMachine.Deterministic.Elisp
     ( makeTransitionFunctionCharTables )
@@ -20,11 +21,14 @@ import qualified Data.RangeSet as RS
 import           Data.Char (ord)
 import           Data.Maybe (mapMaybe)
 import           Data.SExpr
-import           Data.FiniteStateMachine.Deterministic
+import qualified Data.FiniteStateMachine.Deterministic as DFA
 
 -- | Turn the DFA into a collection of 'char-table's, one for each
 -- state, plus a vector containing all these char-tables
-makeTransitionFunctionCharTables :: ShowSExpr a => String -> DFA Char a -> [SExpr]
+makeTransitionFunctionCharTables :: ShowSExpr a =>
+                                    String
+                                 -> DFA.DFA Char a
+                                 -> [SExpr]
 makeTransitionFunctionCharTables prefix dfa =
     [ SExpr [ Atom "defconst"
             , Atom (prefix ++ "-transition-vector")
@@ -48,7 +52,9 @@ makeTransitionFunctionCharTables prefix dfa =
             ]
     ]
     where
-      DFA transitions errorStates acceptingStates = dfa
+      transitions = DFA.transitions dfa
+      errorStates = DFA.errorStates dfa
+      acceptingStates = DFA.acceptingStates dfa
 
       charTableName q = "s-" ++ show q
 

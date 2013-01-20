@@ -114,7 +114,7 @@ instance Arbitrary RegexpInput where
 -- anything, so we only test part of the specification.
 prop_regexp :: Regexp Char -> RegexpInput -> Bool
 prop_regexp (r :: Regexp Char) (RegexpInput i) =
-    runFSM r i == runFSM (makeDFA r) i
+    runFSM r i == runFSM (toDFA $ fromFSM r) i
 
 --------------------------------------------------------------------------------
 main :: IO ()

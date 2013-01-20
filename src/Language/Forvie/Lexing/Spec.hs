@@ -138,4 +138,4 @@ newtype CompiledLexSpec tok
 -- specification are shared so that the compilation step is only
 -- executed once.
 compileLexicalSpecification :: Ord tok => LexicalSpecification tok -> CompiledLexSpec tok
-compileLexicalSpecification regexps = LS $ DFA.makeDFA regexps
+compileLexicalSpecification regexps = LS $ DFA.dfaOfFSM regexps

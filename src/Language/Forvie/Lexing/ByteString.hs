@@ -57,7 +57,7 @@ lex dfa errorHandler string = go 0
 
       beforeLexeme pos
           | pos == length = return StreamEnd
-          | otherwise     = onChar 0 pos (initLexeme pos)
+          | otherwise     = onChar (DFA.initialState dfa) pos (initLexeme pos)
 
       inLexeme q lexeme pos
           | pos == length = emit lexeme Nothing

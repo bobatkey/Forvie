@@ -30,7 +30,7 @@ alphaNum = interval cA cZ .|. interval ca cz .|. interval c0 c9
           c9 = fromInteger $ toInteger $ ord '9'
 
 dfa :: DFA.DFA Word8 Token
-dfa = DFA.makeDFA
+dfa = DFA.dfaOfFSM
       [ tok dollarS .>>. oneOrMore (tok alphaNum) .>>. tok dollarS :==> Variable
       , oneOrMore (tok (complement dollarS))                       :==> Text
       , tok dollarS                                                :==> Text
