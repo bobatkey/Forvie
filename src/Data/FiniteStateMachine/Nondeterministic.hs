@@ -298,29 +298,33 @@ instance (Enum alphabet, Ord alphabet, Bounded alphabet, Monoid result) =>
          FiniteStateMachine (NFA alphabet result)
     where
 
-    type State (NFA alphabet result)    = IS.IntSet
+    data State (NFA alphabet result)
+        = NFAState { unNFAState :: IS.IntSet } deriving (Eq, Ord)
     type Alphabet (NFA alphabet result) = alphabet
     type Result (NFA alphabet result)   = result
 
     initState nfa =
-        closeUnderEpsilon nfa (IS.singleton (nfaInitialState nfa))
+        NFAState $ closeUnderEpsilon nfa (IS.singleton (nfaInitialState nfa))
 
-    advance nfa a stateSet =
-        closeUnderEpsilon nfa newStateSet
-        where
-          newStateSet =
-              IS.unions $ map (inputTransition nfa a) $ IS.elems stateSet
+    advance nfa a =
+        NFAState .
+        closeUnderEpsilon nfa .
+        IS.unions .
+        map (inputTransition nfa a) .
+        IS.elems .
+        unNFAState
 
-    isAcceptingState nfa stateSet =
-        mconcat $
-        map (\q -> IM.lookup q (nfaAcceptingStates nfa)) $
-        IS.elems stateSet
+    isAcceptingState nfa =
+        mconcat .
+        map (\q -> IM.lookup q (nfaAcceptingStates nfa)) .
+        IS.elems .
+        unNFAState
 
     classes nfa state = partition
         where
           transitionGroups =
               groups $ fold [ singletonGrouping (advance nfa a state) a |
-                              q <- IS.elems state
+                              q <- IS.elems (unNFAState state)
                             , a <- possibleInputs nfa q
                             ]
 

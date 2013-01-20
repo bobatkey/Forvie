@@ -77,13 +77,17 @@ data DFA alphabet result = DFA
 -- | DFAs are finite state machines.
 instance (Enum alphabet, Bounded alphabet, Ord alphabet) =>
     FiniteStateMachine (DFA alphabet result) where
-    type State (DFA alphabet result)    = Int
+    data State (DFA alphabet result) =
+        DFAState { unDFAState :: Int } deriving (Eq, Ord)
     type Alphabet (DFA alphabet result) = alphabet
     type Result (DFA alphabet result)   = result
-    initState dfa = 0
-    advance dfa a q = (transitions dfa ! q) $@ a
-    isAcceptingState dfa q = IM.lookup q (acceptingStates dfa)
-    classes dfa q = domainPartition (transitions dfa ! q)
+    initState dfa = DFAState 0
+
+    advance dfa a q = DFAState $ (transitions dfa ! unDFAState q) $@ a
+
+    isAcceptingState dfa q = IM.lookup (unDFAState q) (acceptingStates dfa)
+
+    classes dfa q = domainPartition (transitions dfa ! unDFAState q)
 
 -- | Transform the result values of a DFA.
 instance Functor (DFA alphabet) where

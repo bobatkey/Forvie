@@ -67,13 +67,15 @@ instance Monoid (Regexp alphabet) where
 -- Brzozowski derivatives.
 instance (Ord alphabet, Enum alphabet, Bounded alphabet) =>
     FiniteStateMachine (Regexp alphabet) where
-    type State    (Regexp alphabet) = Regexp alphabet
+    data State    (Regexp alphabet)
+        = RegexpState { unRegexpState :: Regexp alphabet }
+          deriving (Eq, Ord)
     type Alphabet (Regexp alphabet) = alphabet
     type Result   (Regexp alphabet) = ()
-    initState r        = r
-    advance _ c        = diffN c
-    isAcceptingState _ = guard . matchesEmptyN
-    classes _          = classesN
+    initState r        = RegexpState r
+    advance _ c        = RegexpState . diffN c . unRegexpState
+    isAcceptingState _ = guard . matchesEmptyN . unRegexpState
+    classes _          = classesN . unRegexpState
 
 {------------------------------------------------------------------------------}
 matchesEmptyN :: Regexp alphabet -> Bool

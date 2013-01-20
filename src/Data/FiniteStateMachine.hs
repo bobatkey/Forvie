@@ -1,4 +1,4 @@
-{-# LANGUAGE TypeFamilies, FlexibleContexts, TypeOperators #-}
+{-# LANGUAGE TypeFamilies, FlexibleContexts, TypeOperators, FlexibleInstances #-}
 
 -- |
 -- Module         : Control.FiniteStateMachine
@@ -33,7 +33,6 @@ import Data.RangeSet (Partition, fromSet, singleton)
 import Data.Monoid (mempty)
 import Data.Maybe (listToMaybe, mapMaybe)
 import Data.Foldable (foldMap)
-import Data.Functor ((<$>))
 
 -- | Class of types whose inhabitants represent finite state
 -- machines. Members of this type class should be /finite/ state. So
@@ -42,13 +41,14 @@ import Data.Functor ((<$>))
 -- necessarily mean that the 'State fsm' type is an instance of
 -- 'Bounded'.
 class ( Ord (State fsm)
+      , Eq (State fsm)
       , Enum (Alphabet fsm)
       , Ord (Alphabet fsm)
       , Bounded (Alphabet fsm))
     => FiniteStateMachine fsm where
 
     -- | The type of states of finite state acceptors of this type.
-    type State fsm :: *
+    data State fsm :: *
 
     -- | The type of symbols recognised by this type of finite state
     -- acceptor.
@@ -77,35 +77,72 @@ class ( Ord (State fsm)
     -- s'. FIXME: explain this better.
     classes :: fsm -> State fsm -> Partition (Alphabet fsm)
 
+--------------------------------------------------------------------------------
 -- | Really should be fixed length vectors, but I can't be
 -- bothered. FIXME: might be easier with the data kinds stuff.
 instance FiniteStateMachine fsm => FiniteStateMachine [fsm] where
-    type State [fsm]    = [State fsm]
+    data State [fsm]    = ListFSMState { unListFSMState :: [State fsm] }
     type Alphabet [fsm] = Alphabet fsm
     type Result [fsm]   = Result fsm
 
-    initState r = map initState r
-    advance r c s = map (\(r,s) -> advance r c s) $ zip r s
-    isAcceptingState r =
-        listToMaybe . mapMaybe (\(r,s) -> isAcceptingState r s) . zip r
-    classes r = foldMap (uncurry classes) . zip r
+    initState fsms =
+        ListFSMState (map initState fsms)
 
+    advance fsms c =
+        ListFSMState .
+        map (\(fsm,s) -> advance fsm c s) .
+        zip fsms .
+        unListFSMState
+
+    isAcceptingState fsm =
+        listToMaybe .
+        mapMaybe (uncurry isAcceptingState) .
+        zip fsm .
+        unListFSMState
+
+    classes fsm =
+        foldMap (uncurry classes) . zip fsm . unListFSMState
+
+instance Eq (State fsm) => Eq (State [fsm]) where
+    ListFSMState s1 == ListFSMState s2 = s1 == s2
+
+instance Ord (State fsm) => Ord (State [fsm]) where
+    compare (ListFSMState s1) (ListFSMState s2) =
+        compare s1 s2
+
+--------------------------------------------------------------------------------
 -- | A tuple type intended for attaching result values to existing
 -- 'FiniteStateMachine's.
-data a :==> b = a :==> b
+data fsm :==> a = fsm :==> a
     deriving (Eq, Ord, Show)
 
 infixr 5 :==>
 
 -- | Attaching results to 'FiniteStateMachine's
-instance FiniteStateMachine r => FiniteStateMachine (r :==> a) where
-     type State (r :==> a)    = State r
-     type Alphabet (r :==> a) = Alphabet r
-     type Result (r :==> a)   = a
-     initState (r :==> a) = initState r
-     advance (r :==> a) c s = advance r c s
-     isAcceptingState (r :==> a) s = const a <$> isAcceptingState r s
-     classes (r :==> a) s = classes r s
+instance (FiniteStateMachine fsm) => FiniteStateMachine (fsm :==> a) where
+     data State (fsm :==> a)
+         = TaggedFSMState { unTaggedFSMState :: State fsm }
+     type Alphabet (fsm :==> a) = Alphabet fsm
+     type Result (fsm :==> a)   = a
+
+     initState (fsm :==> a) =
+         TaggedFSMState $ initState fsm
+
+     advance (fsm :==> a) c =
+         TaggedFSMState . advance fsm c . unTaggedFSMState
+
+     isAcceptingState (fsm :==> a) =
+         fmap (const a) . isAcceptingState fsm . unTaggedFSMState
+
+     classes (fsm :==> a) =
+         classes fsm . unTaggedFSMState
+
+instance Eq (State fsm) => Eq (State (fsm :==> a)) where
+    TaggedFSMState s1 == TaggedFSMState s2 = s1 == s2
+
+instance Ord (State fsm) => Ord (State (fsm :==> a)) where
+    compare (TaggedFSMState s1) (TaggedFSMState s2) =
+        compare s1 s2
 
 --------------------------------------------------------------------------------
 -- | Treat a list of items as a 'FiniteStateMachine'. As a
@@ -117,24 +154,26 @@ newtype Literal a = Literal [a]
 -- 'FiniteStateMachine', @Literal l@ accepts exactly the list of
 -- symbols @l@.
 instance (Bounded a, Enum a, Ord a) => FiniteStateMachine (Literal a) where
-    type State (Literal a)    = Maybe [a]
+    data State (Literal a)    = Expecting [a]
+                              | Error
+                                deriving (Eq, Ord)
     type Alphabet (Literal a) = a
     type Result (Literal a)   = ()
 
-    initState (Literal l) = Just l
+    initState (Literal l) = Expecting l
 
-    advance _ c Nothing   = Nothing
-    advance _ c (Just []) = Nothing
-    advance _ c (Just (c':cs))
-        | c == c'   = Just cs
-        | otherwise = Nothing
+    advance _ c Error          = Error
+    advance _ c (Expecting []) = Error
+    advance _ c (Expecting (c':cs))
+        | c == c'   = Expecting cs
+        | otherwise = Error
 
-    isAcceptingState _ (Just []) = Just ()
-    isAcceptingState _ _         = Nothing
+    isAcceptingState _ (Expecting []) = Just ()
+    isAcceptingState _ _              = Nothing
 
-    classes _ Nothing      = mempty
-    classes _ (Just [])    = mempty
-    classes _ (Just (c:_)) = fromSet (singleton c)
+    classes _ Error             = mempty
+    classes _ (Expecting [])    = mempty
+    classes _ (Expecting (c:_)) = fromSet (singleton c)
 
 --------------------------------------------------------------------------------
 -- | Simulate a finite state machine on an input sequence. The input
@@ -142,8 +181,9 @@ instance (Bounded a, Enum a, Ord a) => FiniteStateMachine (Literal a) where
 runFSM :: FiniteStateMachine fsm =>
           fsm -- ^ A finite state machine
        -> [Alphabet fsm] -- ^ Input sequence, should be finite
-       -> Maybe (Result fsm) -- ^ `Nothing` if the sequence is not
-                             -- accepted. 'Just x' if the whole
+       -> Maybe (Result fsm) -- ^ @Nothing@ if the sequence is not
+                             -- accepted by the finite state
+                             -- machine. @Just x@ if the whole
                              -- sequence is accepted
 runFSM fsm input
     = run (initState fsm) input

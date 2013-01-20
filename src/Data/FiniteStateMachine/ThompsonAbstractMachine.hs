@@ -196,18 +196,20 @@ close (Machine instrs) = closeState IS.empty
 
 instance (Enum alphabet, Bounded alphabet, Ord alphabet) =>
     FiniteStateMachine (Machine alphabet) where
-    type State    (Machine alphabet) = IS.IntSet
+    data State    (Machine alphabet) =
+        MachineState { unMachineState :: IS.IntSet } deriving (Eq, Ord)
     type Alphabet (Machine alphabet) = alphabet
     type Result   (Machine alphabet) = ()
 
     -- the states of states are always closed
     initState machine =
-        close machine 0
+        MachineState (close machine 0)
 
     -- assumption: @pcs@ is 'closed'
     advance machine c pcSet =
+        MachineState $
         IS.unions [ close machine q' |
-                    q  <- IS.elems pcSet
+                    q  <- IS.elems (unMachineState pcSet)
                   , q' <- case mInstrs machine ! q of
                             Token s | RS.member c s -> [q+1]
                             _ -> []
@@ -215,13 +217,13 @@ instance (Enum alphabet, Bounded alphabet, Ord alphabet) =>
 
     isAcceptingState (Machine instrs) pcSet =
         mconcat [ Just () |
-                  q <- IS.elems pcSet
+                  q <- IS.elems (unMachineState pcSet)
                 , instrs ! q == Match
                 ]
 
     classes (Machine instrs) pcSet =
         mconcat [ RS.fromSet s |
-                  q <- IS.elems pcSet
+                  q <- IS.elems (unMachineState pcSet)
                 , s <- case instrs ! q of
                          Token s -> [s]
                          _ -> []
